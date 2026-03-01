@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { supabase } from '../utils/supabaseClient'; //
+import { supabase } from "../utils/supabaseClient";
 import JournalEntryView, {
   type JournalEntry,
   type ScreenPoint,
@@ -23,8 +23,8 @@ interface CalendarProps {
 
 const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
   const [currentView, setCurrentView] = useState(activeMonthISO);
-  const [dbEntries, setDbEntries] = useState<any[]>([]); //
-  const [loading, setLoading] = useState(true); //
+  const [allEntries, setAllEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Journal overlay state
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
@@ -32,23 +32,45 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
   const [nodeColor, setNodeColor] = useState("#fff");
   const [clickOrigin, setClickOrigin] = useState<ScreenPoint>({ x: 0, y: 0 });
 
-  // 1. Fetch live entries from Supabase
+  // ── Fetch entries + derive full themes from theme_embeddings ──────────────
   useEffect(() => {
-    const fetchCalendarData = async () => {
+    const fetchData = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('journal_entries')
-        .select('*');
 
-      if (error) {
-        console.error("Supabase Error:", error);
-      } else {
-        setDbEntries(data || []);
+      const [entriesRes, embeddingsRes] = await Promise.all([
+        supabase.from("journal_entries").select("*"),
+        supabase.from("theme_embeddings").select("journal_id, theme"),
+      ]);
+
+      if (entriesRes.error || embeddingsRes.error) {
+        console.error(
+          "Supabase Error:",
+          entriesRes.error || embeddingsRes.error
+        );
+        setLoading(false);
+        return;
       }
+
+      // Build a map of journal_id → unique themes[]
+      const themesByJournal = new Map<string, Set<string>>();
+      (embeddingsRes.data || []).forEach((row: any) => {
+        if (!themesByJournal.has(row.journal_id)) {
+          themesByJournal.set(row.journal_id, new Set());
+        }
+        themesByJournal.get(row.journal_id)!.add(row.theme);
+      });
+
+      // Override themes on each entry with the full list
+      const enriched = (entriesRes.data || []).map((entry: any) => ({
+        ...entry,
+        themes: Array.from(themesByJournal.get(entry.id) ?? []),
+      }));
+
+      setAllEntries(enriched);
       setLoading(false);
     };
 
-    fetchCalendarData();
+    fetchData();
   }, []);
 
   // Parse year/month
@@ -56,13 +78,12 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
   const year = parseInt(yearStr);
   const month = parseInt(monthStr);
 
-  // 2. Group live entries by day
+  // Group entries by day for the current month
   const entriesByDay = useMemo(() => {
     const buckets: Record<number, any[]> = {};
 
-    dbEntries.forEach((entry: any) => {
+    allEntries.forEach((entry: any) => {
       if (!entry.entry_date) return;
-      // Ensure date is treated as local to prevent timezone shifts
       const d = new Date(entry.entry_date + "T00:00:00");
       if (d.getFullYear() === year && d.getMonth() === month - 1) {
         const day = d.getDate();
@@ -71,9 +92,9 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
     });
 
     return buckets;
-  }, [year, month, dbEntries]);
+  }, [year, month, allEntries]);
 
-  // Count entries + find dominant emotion for subtitle
+  // Count entries + dominant emotion for subtitle
   const { totalEntries, dominantEmotion } = useMemo(() => {
     const all = Object.values(entriesByDay).flat();
     const counts: Record<string, number> = {};
@@ -107,20 +128,27 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
     return dayNumber > 0 && dayNumber <= daysInMonth ? dayNumber : null;
   });
 
-  // Click handler for a dot
+  // Click handler
   const handleDotClick = (entry: any, e: React.MouseEvent) => {
     e.stopPropagation();
     const color = EMOTION_COLORS[entry.primary_emotion] || "#fff";
     setClickOrigin({ x: e.clientX, y: e.clientY });
     setNodeColor(color);
-    // Directly passing the entry as Supabase columns match the interface
     setSelectedEntry(entry as JournalEntry);
     setEntryOpen(true);
   };
 
   if (loading) {
     return (
-      <div className="calendar-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#666' }}>
+      <div
+        className="calendar-container"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          color: "#666",
+        }}
+      >
         Loading Constellation Data...
       </div>
     );
@@ -138,7 +166,7 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
           </h2>
           {totalEntries > 0 && dominantEmotion && (
             <p className="subtitle">
-              {totalEntries} {totalEntries === 1 ? "entry" : "entries"} •
+              {totalEntries} {totalEntries === 1 ? "entry" : "entries"} ·
               Predominantly{" "}
               <span style={{ color: EMOTION_COLORS[dominantEmotion] }}>
                 {dominantEmotion}
@@ -171,7 +199,8 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
                       key={entry.id ?? i}
                       className="entry-dot"
                       style={{
-                        backgroundColor: EMOTION_COLORS[entry.primary_emotion] || "#555",
+                        backgroundColor:
+                          EMOTION_COLORS[entry.primary_emotion] || "#555",
                         width: `${24 + (entry.intensity ?? 0.5) * 12}px`,
                         height: `${24 + (entry.intensity ?? 0.5) * 12}px`,
                       }}
@@ -192,7 +221,8 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
         color={nodeColor}
         origin={clickOrigin}
         onClose={() => setEntryOpen(false)}
-        closeOnBackdrop
+        closeOnBackdrop={false}
+        allEntries={allEntries}
       />
     </div>
   );

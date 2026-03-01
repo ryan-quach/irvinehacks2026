@@ -4,18 +4,15 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter,
+    Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.85);
   -webkit-font-smoothing: antialiased;
 }
 
-/* ─── Color flood ────────────────────────────────────────────────────────────
-   A full-screen layer clipped to a circle at the click point.
-   Grows from 0 → full-viewport while the colour transitions
-   from the node colour → #131313 (dark background).
-────────────────────────────────────────────────────────────────────────────── */
+/* ─── Color flood (unchanged) ────────────────────────────────────────────── */
 
 .jev-flood {
   position: absolute;
@@ -24,22 +21,16 @@
   background: var(--jev-color);
   clip-path: circle(0px at var(--jev-ox) var(--jev-oy));
   will-change: clip-path, background-color, opacity;
-
-  /* default transition — used by the "filling" phase */
-  transition:
-    clip-path       4000ms cubic-bezier(0.22, 1, 0.36, 1),
+  transition: clip-path 4000ms cubic-bezier(0.22, 1, 0.36, 1),
     background-color 1000ms ease 700ms;
 }
 
-/* Expanded + dark — hold this for all later phases */
 .jev-filling .jev-flood,
-.jev-reveal  .jev-flood,
-.jev-shown   .jev-flood {
+.jev-reveal .jev-flood,
+.jev-shown .jev-flood {
   clip-path: circle(200vmax at var(--jev-ox) var(--jev-oy));
   background: #131313;
 }
-
-/* ─── Exit phase 1 — content fades, flood holds steady ──────────────────── */
 
 .jev-exit .jev-surface {
   opacity: 0;
@@ -49,26 +40,21 @@
 .jev-exit .jev-flood {
   clip-path: circle(100vmax at var(--jev-ox) var(--jev-oy));
   background: #131313;
-  transition: none;          /* freeze — nothing should move yet */
+  transition: none;
 }
 
-/* ─── Exit phase 2 — flood turns purple and shrinks to origin ───────────── */
-
 .jev-exit-shrink .jev-surface {
-  opacity: 0;                /* stay hidden */
+  opacity: 0;
 }
 
 .jev-exit-shrink .jev-flood {
   clip-path: circle(0px at var(--jev-ox) var(--jev-oy));
   background: var(--jev-color);
-  transition:
-    clip-path        600ms cubic-bezier(0.4, 0, 1, 1),
-    background-color  300ms ease;
+  transition: clip-path 600ms cubic-bezier(0.4, 0, 1, 1),
+    background-color 300ms ease;
 }
-/* ─── Surface (content layer) ────────────────────────────────────────────────
-   Sits on top of the flood.  Invisible during the flood animation,
-   then fades in once the screen is dark.
-────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── Surface (unchanged) ────────────────────────────────────────────────── */
 
 .jev-surface {
   position: absolute;
@@ -83,8 +69,8 @@
   transition: opacity 450ms ease;
 }
 
-.jev-reveal  .jev-surface,
-.jev-shown   .jev-surface {
+.jev-reveal .jev-surface,
+.jev-shown .jev-surface {
   opacity: 1;
 }
 
@@ -93,7 +79,7 @@
   transition: opacity 300ms ease;
 }
 
-/* ─── Header ───────────────────────────────────────────────────────────────── */
+/* ─── Header (unchanged) ─────────────────────────────────────────────────── */
 
 .jev-header {
   height: 56px;
@@ -164,30 +150,13 @@
   border-color: rgba(255, 255, 255, 0.07) !important;
 }
 
-/* ─── Body grid ─────────────────────────────────────────────────────────────── */
+/* ─── Body — single scrollable column (CHANGED) ─────────────────────────── */
 
 .jev-body {
-  display: grid;
-  grid-template-columns: 1fr 300px;
   flex: 1;
-  overflow: hidden;
-  min-height: 0;
-}
-
-@media (max-width: 820px) {
-  .jev-body {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
-    overflow-y: auto;
-  }
-}
-
-/* ─── Transcript column ─────────────────────────────────────────────────────── */
-
-.jev-col-transcript {
-  padding: 36px 44px;
   overflow-y: auto;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 32px 48px;
+  min-height: 0;
 }
 
 .jev-section-label {
@@ -200,6 +169,17 @@
   padding: 0;
 }
 
+.jev-content-section {
+  margin-bottom: 32px;
+}
+
+.jev-summary {
+  font-size: 15px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0;
+}
+
 .jev-transcript {
   font-size: 15px;
   line-height: 1.8;
@@ -208,200 +188,123 @@
   font-weight: 400;
 }
 
-/* ─── Insights sidebar ──────────────────────────────────────────────────────── */
+/* ─── Theme buttons ──────────────────────────────────────────────────────── */
 
-.jev-col-insights {
+.jev-theme-buttons {
   display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: 0;
-}
-
-.jev-insight-block {
-  padding: 20px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.jev-insight-block:last-child {
-  border-bottom: none;
-}
-
-.jev-insight-block--meta {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: auto;
-  padding-bottom: 24px;
-}
-
-/* ─── Summary ───────────────────────────────────────────────────────────────── */
-
-.jev-summary {
-  font-size: 13px;
-  line-height: 1.7;
-  color: rgba(255, 255, 255, 0.55);
-  margin: 0;
-}
-
-/* ─── Affect map (Russell circumplex) ───────────────────────────────────────── */
-
-.jev-affect-wrap {
-  display: flex;
-  align-items: stretch;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.jev-affect-ylabels {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 2px 0;
-  align-items: flex-end;
-}
-
-.jev-affect-ylabels span,
-.jev-affect-xlabels span {
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.22);
-  line-height: 1;
-}
-
-.jev-affect-right {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.jev-affect-map {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.jev-affect-axis {
-  position: absolute;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.jev-affect-axis--h {
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 1px;
-  transform: translateY(-50%);
-}
-
-.jev-affect-axis--v {
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  transform: translateX(-50%);
-}
-
-.jev-affect-dot {
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  opacity: 0.85;
-  transition:
-    left 600ms cubic-bezier(0.16, 1, 0.3, 1),
-    top  600ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.jev-affect-xlabels {
-  display: flex;
-  justify-content: space-between;
-  padding: 0 2px;
-}
-
-/* ─── Intensity bar ─────────────────────────────────────────────────────────── */
-
-.jev-intensity-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.jev-bar-track {
-  flex: 1;
-  height: 3px;
+.jev-theme-btn {
+  font-size: 12px;
+  padding: 6px 16px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-  overflow: hidden;
-}
-
-.jev-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  opacity: 0.7;
-  transition: width 500ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.jev-bar-value {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.3);
-  font-variant-numeric: tabular-nums;
-  min-width: 26px;
-  text-align: right;
-}
-
-/* ─── Theme chips ───────────────────────────────────────────────────────────── */
-
-.jev-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.jev-chip {
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: lowercase;
   letter-spacing: 0.02em;
+  font-family: inherit;
 }
 
-/* ─── Metadata ──────────────────────────────────────────────────────────────── */
+.jev-theme-btn:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.jev-theme-btn.active {
+  border-color: var(--jev-color);
+  color: var(--jev-color);
+  background: color-mix(in srgb, var(--jev-color) 8%, transparent);
+}
+
+/* ─── Charts ─────────────────────────────────────────────────────────────── */
+
+.jev-charts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.jev-chart-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+  margin-bottom: 8px;
+}
+
+.jev-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.jev-chart-empty {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 13px;
+  font-style: italic;
+  padding: 24px 0;
+}
+
+/* ─── Meta footer ────────────────────────────────────────────────────────── */
+
+.jev-meta-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
 
 .jev-mono {
-  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+    monospace;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.25);
 }
 
-/* ─── Scrollbars ────────────────────────────────────────────────────────────── */
+/* ─── Tooltip ────────────────────────────────────────────────────────────── */
 
-.jev-col-transcript::-webkit-scrollbar,
-.jev-col-insights::-webkit-scrollbar {
+.jev-tooltip {
+  position: fixed;
+  z-index: 10001;
+  background: rgba(10, 10, 10, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 12px 16px;
+  max-width: 260px;
+  pointer-events: none;
+  backdrop-filter: blur(12px);
+}
+
+.jev-tooltip-summary {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+
+.jev-body::-webkit-scrollbar {
   width: 3px;
 }
 
-.jev-col-transcript::-webkit-scrollbar-track,
-.jev-col-insights::-webkit-scrollbar-track {
+.jev-body::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.jev-col-transcript::-webkit-scrollbar-thumb,
-.jev-col-insights::-webkit-scrollbar-thumb {
+.jev-body::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.09);
   border-radius: 999px;
 }
 
-.jev-col-transcript::-webkit-scrollbar-thumb:hover,
-.jev-col-insights::-webkit-scrollbar-thumb:hover {
+.jev-body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.16);
 }
