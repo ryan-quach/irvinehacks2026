@@ -1,8 +1,12 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import ForceGraph3D, { type ForceGraphMethods } from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
-import * as THREE from 'three'; 
+import * as THREE from 'three';
 import graphDataRaw from '../data/journal_full_data.json';
+import JournalEntryView, {
+  type JournalEntry,
+  type ScreenPoint,
+} from './JournalEntryView';
 
 // --- Configuration ---
 const EMOTION_COLORS: Record<string, string> = {
@@ -12,7 +16,7 @@ const EMOTION_COLORS: Record<string, string> = {
   anxiety: "#A892EE",
   stress: "#FF6B6B",
   sadness: "#5DADE2",
-  anger: "#E74C3C"
+  anger: "#E74C3C",
 };
 
 const THEMES_COUNT = 7;
@@ -33,33 +37,61 @@ const getCosineSimilarity = (vecA: number[], vecB: number[]) => {
 const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
 
-  // 1. Data Processing with Sanitization
+  // ── Journal Entry View state ──────────────────────────────────────────────
+  const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
+  const [entryOpen, setEntryOpen] = useState(false);
+  const [nodeColor, setNodeColor] = useState("#ffffff");
+  const [clickOrigin, setClickOrigin] = useState<ScreenPoint>({ x: 0, y: 0 });
+
+  // ── Node click handler ────────────────────────────────────────────────────
+  const handleNodeClick = useCallback((node: any, event: MouseEvent) => {
+    const color = EMOTION_COLORS[node.primary_emotion] || "#ffffff";
+
+    // Screen position of the click for the flood animation origin
+    setClickOrigin({ x: event.clientX, y: event.clientY });
+    setNodeColor(color);
+
+    // Map graph node → JournalEntry shape
+    setSelectedEntry({
+      transcript: node.transcript || "",
+      summary: node.summary || "",
+      primary_emotion: node.primary_emotion || "",
+      secondary_emotion: node.secondary_emotion || "",
+      intensity: node.intensity ?? 0,
+      valence: node.valence ?? 0,
+      arousal: node.arousal ?? 0,
+      themes: node.themes || [],
+      embedding: "",
+      entry_date: node.entry_date || "",
+      created_at: node.created_at || "",
+    });
+
+    setEntryOpen(true);
+  }, []);
+
+  // 1. Data Processing — keep ALL fields from raw data
   const processedData = useMemo(() => {
-    // We map to new objects to ensure no "sticky" physics properties (fx, fy, fz) remain
     const rawEntries = graphDataRaw?.entries || [];
+
+    // Spread all fields so JournalEntryView has access to transcript, valence, etc.
     const entries = rawEntries.map((node: any) => ({
+      ...node,
       id: node.id,
-      entry_date: node.entry_date,
-      primary_emotion: node.primary_emotion,
-      intensity: node.intensity,
-      summary: node.summary,
-      embeddings: node.embeddings,
-      themes: node.themes || []
     }));
 
     const links: any[] = [];
-    const THRESHOLD = 0.85;
     const connectionCounts: Record<string, number> = {};
+    const THRESHOLD = 0.85;
 
-    entries.forEach((nodeA, i) => {
+    entries.forEach((nodeA: any, i: number) => {
       for (let tIdx = 0; tIdx < THEMES_COUNT; tIdx++) {
         let bestMatch: { id: string; score: number } | null = null;
-        const vA = nodeA.embeddings[tIdx];
+        const vA = nodeA.embeddings?.[tIdx];
         if (!vA) continue;
 
-        entries.forEach((nodeB, j) => {
+        entries.forEach((nodeB: any, j: number) => {
           if (i === j) return;
-          const vB = nodeB.embeddings[tIdx];
+          const vB = nodeB.embeddings?.[tIdx];
           if (!vB) return;
 
           const score = getCosineSimilarity(vA, vB);
@@ -80,7 +112,7 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
 
     const emotionLeaders: Record<string, string> = {};
     const maxCounts: Record<string, number> = {};
-    entries.forEach(node => {
+    entries.forEach((node: any) => {
       const count = connectionCounts[node.id] || 0;
       if (!maxCounts[node.primary_emotion] || count > maxCounts[node.primary_emotion]) {
         maxCounts[node.primary_emotion] = count;
@@ -88,12 +120,14 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
       }
     });
 
-    return { 
-      nodes: entries.map(node => ({
+    return {
+      nodes: entries.map((node: any) => ({
         ...node,
-        isLeader: emotionLeaders[node.primary_emotion] === node.id && (connectionCounts[node.id] || 0) > 0
-      })), 
-      links 
+        isLeader:
+          emotionLeaders[node.primary_emotion] === node.id &&
+          (connectionCounts[node.id] || 0) > 0,
+      })),
+      links,
     };
   }, []);
 
@@ -102,17 +136,14 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
     if (!fgRef.current) return;
 
     if (isVisible) {
-      // Small timeout ensures the container has finished its CSS transition/display change
       const timer = setTimeout(() => {
-        fgRef.current?.d3Force('charge')?.strength(-400); 
+        fgRef.current?.d3Force('charge')?.strength(-400);
         fgRef.current?.d3Force('link')?.distance(120);
         fgRef.current?.d3ReheatSimulation();
-        // Force a renderer refresh to fix aspect ratio
         fgRef.current?.refresh();
       }, 50);
       return () => clearTimeout(timer);
     } else {
-      // Stop physics engine while hidden to prevent NaN errors (the "tick" crash)
       fgRef.current.stopAnimation();
     }
   }, [isVisible]);
@@ -120,11 +151,11 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
   return (
     <div
       className="graph-wrapper"
-      style={{ 
-        width: '100vw', 
-        height: '100vh', 
+      style={{
+        width: '100vw',
+        height: '100vh',
         background: '#020202',
-        position: 'relative' 
+        position: 'relative',
       }}
     >
       <ForceGraph3D
@@ -132,19 +163,14 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
         graphData={processedData}
         backgroundColor="#020202"
         showNavInfo={false}
-        
-        // Link Style
         linkColor={() => "rgba(255, 255, 255, 0.25)"}
         linkWidth={1.5}
-
-        // Interaction
-        nodeLabel={() => ""} 
-
-        // Node Geometry
+        nodeLabel={() => ""}
+        onNodeClick={handleNodeClick}
         nodeThreeObject={(node: any) => {
           const color = EMOTION_COLORS[node.primary_emotion] || "#ffffff";
-          const radius = 6 + (Math.pow(node.intensity, 2) * 15);
-          
+          const radius = 6 + Math.pow(node.intensity, 2) * 15;
+
           const geometry = new THREE.SphereGeometry(radius, 32, 32);
           const material = new THREE.MeshBasicMaterial({ color });
           const sphere = new THREE.Mesh(geometry, material);
@@ -154,10 +180,8 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
             sprite.color = color;
             sprite.textHeight = 10;
             sprite.fontWeight = 'bold';
-            
-            // Positioning label above the node
-            sprite.position.set(0, radius + 15, 0); 
-            sprite.center.set(0.5, 0); 
+            sprite.position.set(0, radius + 15, 0);
+            sprite.center.set(0.5, 0);
 
             const group = new THREE.Group();
             group.add(sphere);
@@ -167,6 +191,16 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
 
           return sphere;
         }}
+      />
+
+      {/* Journal Entry overlay */}
+      <JournalEntryView
+        open={entryOpen}
+        entry={selectedEntry}
+        color={nodeColor}
+        origin={clickOrigin}
+        onClose={() => setEntryOpen(false)}
+        closeOnBackdrop
       />
     </div>
   );
