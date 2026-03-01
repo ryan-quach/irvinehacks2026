@@ -103,9 +103,10 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
         });
 
         if (bestMatch) {
-          links.push({ source: nodeA.id, target: bestMatch.id });
+          const match = bestMatch as { id: string; score: number };
+          links.push({ source: nodeA.id, target: match.id });
           connectionCounts[nodeA.id] = (connectionCounts[nodeA.id] || 0) + 1;
-          connectionCounts[bestMatch.id] = (connectionCounts[bestMatch.id] || 0) + 1;
+          connectionCounts[match.id] = (connectionCounts[match.id] || 0) + 1;
         }
       }
     });
@@ -133,20 +134,22 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
 
   // 2. Physics & Visibility Control
   useEffect(() => {
-    if (!fgRef.current) return;
+  if (!fgRef.current) return;
 
-    if (isVisible) {
-      const timer = setTimeout(() => {
-        fgRef.current?.d3Force('charge')?.strength(-400);
-        fgRef.current?.d3Force('link')?.distance(120);
-        fgRef.current?.d3ReheatSimulation();
-        fgRef.current?.refresh();
-      }, 50);
-      return () => clearTimeout(timer);
-    } else {
-      fgRef.current.stopAnimation();
-    }
-  }, [isVisible]);
+  if (isVisible) {
+    fgRef.current.resumeAnimation(); // ← this was missing
+
+    const timer = setTimeout(() => {
+      fgRef.current?.d3Force('charge')?.strength(-400);
+      fgRef.current?.d3Force('link')?.distance(120);
+      fgRef.current?.d3ReheatSimulation();
+      fgRef.current?.refresh();
+    }, 50);
+    return () => clearTimeout(timer);
+  } else {
+    fgRef.current.pauseAnimation();
+  }
+}, [isVisible]);
 
   return (
     <div
