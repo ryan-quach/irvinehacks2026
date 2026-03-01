@@ -38,16 +38,16 @@ THEMES = [
 ]
 
 THEME_DESCRIPTIONS = {
-    "work": "career, job, workplace, manager, coworkers, professional life, meetings, deadlines, projects",
-    "fitness": "exercise, gym, workout, physical health, sports, running, lifting, training, cardio",
-    "relationships": "partner, girlfriend, boyfriend, spouse, romance, love, dating, intimacy, commitment",
-    "mental_health": "anxiety, depression, stress, emotions, therapy, self-esteem, mood, overwhelm, burnout",
-    "family": "parents, siblings, children, relatives, home life, family dynamics, upbringing, household",
-    "finances": "money, budget, savings, debt, spending, income, bills, financial goals, investments",
-    "friendships": "friends, social life, hanging out, loneliness, connection, support system, social events",
-    "hobbies": "creative outlets, interests, passions, music, art, gaming, reading, side projects, fun",
-    "health": "sleep, nutrition, diet, illness, doctor, medication, energy, physical wellbeing, recovery",
-    "personal_growth": "goals, self-improvement, learning, motivation, habits, discipline, mindset, ambition, purpose",
+    "work": "career, job, workplace, manager, coworkers, professional life, meetings, deadlines, projects, promotion, office",
+    "fitness": "exercise, gym, workout, physical health, sports, running, lifting, training, cardio, personal record, gains",
+    "relationships": "partner, girlfriend, boyfriend, spouse, romance, love, dating, intimacy, commitment, anniversary, connection",
+    "mental_health": "emotions, feelings, mood, happiness, sadness, anxiety, depression, stress, therapy, self-esteem, overwhelm, burnout, optimism, gratitude, mental state, emotional wellbeing, how I feel",
+    "family": "parents, siblings, children, relatives, home life, family dynamics, upbringing, household, mom, dad, brother, sister",
+    "finances": "money, budget, savings, debt, spending, income, bills, financial goals, investments, rent, paycheck, expenses",
+    "friendships": "friends, social life, hanging out, loneliness, connection, support system, social events, buddy, crew, group",
+    "hobbies": "creative outlets, interests, passions, music, art, gaming, reading, side projects, painting, guitar, crafts, collecting",
+    "health": "sleep, nutrition, diet, illness, doctor, medication, energy, physical wellbeing, recovery, blood work, cholesterol, symptoms",
+    "personal_growth": "goals, self-improvement, learning, motivation, habits, discipline, mindset, ambition, purpose, reflection, progress, consistency",
 }
 
 
@@ -77,6 +77,8 @@ def analyze_transcript(transcript):
     prompt = f"""
 You are an emotional analysis engine.
 
+Analyze the ENTIRE transcript as a whole. Return a SINGLE JSON object.
+
 Return STRICT JSON with:
 - summary (1 very short sentence)
 - primary_emotion (must be one of: {EMOTIONS})
@@ -86,7 +88,7 @@ Return STRICT JSON with:
 - arousal (float 0-1)
 - themes (1-4 items chosen only from: {THEMES})
 
-Return JSON only. No explanation.
+Return ONE JSON object only. Do NOT analyze individual sentences. No explanation.
 
 Transcript:
 \"\"\"{transcript}\"\"\"
@@ -102,15 +104,19 @@ Transcript:
         content = content.split("\n", 1)[1]
         content = content.rsplit("```", 1)[0].strip()
 
-    # Try parsing, retry once on failure
+    # Extract first JSON object only (handles LLM returning multiple)
+    match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
+    if match:
+        content = match.group(0)
+
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
-        # Ask the model to fix its own JSON
+        # Retry: ask the model to fix it
         fix_response = ollama.chat(
             model=LLM_MODEL,
             messages=[
-                {"role": "user", "content": f"Fix this broken JSON. Return ONLY valid JSON, nothing else:\n{content}"}
+                {"role": "user", "content": f"Fix this broken JSON. Return ONLY ONE valid JSON object, nothing else:\n{content}"}
             ]
         )
         fix_content = fix_response["message"]["content"].strip()
@@ -118,6 +124,10 @@ Transcript:
         if fix_content.startswith("```"):
             fix_content = fix_content.split("\n", 1)[1]
             fix_content = fix_content.rsplit("```", 1)[0].strip()
+
+        match = re.search(r'\{[^{}]*\}', fix_content, re.DOTALL)
+        if match:
+            fix_content = match.group(0)
 
         try:
             data = json.loads(fix_content)
@@ -127,11 +137,6 @@ Transcript:
     return data
 
 # ─── Chunk transcript by theme (EMBEDDINGS) ───────────────────────────────
-
-# A sentence is added to a second (or third) theme if its similarity
-# is within this margin of the best theme's score.
-MULTI_THEME_MARGIN = 0.05
-
 def chunk_transcript(transcript):
     # 1. Embed each theme description once
     theme_embeddings = {
@@ -145,25 +150,19 @@ def chunk_transcript(transcript):
     if not sentences:
         return [{"theme": "personal_growth", "chunk": transcript.strip()}]
 
-    # 3. Classify each sentence — allow multiple themes
+    # 3. Classify each sentence — best theme only
     grouped = OrderedDict()
     for sentence in sentences:
         sentence_emb = get_embedding_raw(sentence)
 
-        scores = {
-            theme: cosine_similarity(sentence_emb, theme_emb)
-            for theme, theme_emb in theme_embeddings.items()
-        }
+        best_theme = max(
+            theme_embeddings,
+            key=lambda t: cosine_similarity(sentence_emb, theme_embeddings[t])
+        )
 
-        best_score = max(scores.values())
-        threshold = best_score - MULTI_THEME_MARGIN
-
-        matched_themes = [t for t, s in scores.items() if s >= threshold]
-
-        for theme in matched_themes:
-            if theme not in grouped:
-                grouped[theme] = []
-            grouped[theme].append(sentence)
+        if best_theme not in grouped:
+            grouped[best_theme] = []
+        grouped[best_theme].append(sentence)
 
     # 4. Merge into one chunk per theme
     chunks = [
@@ -176,16 +175,18 @@ def chunk_transcript(transcript):
 # ─── Validation ────────────────────────────────────────────────────────────
 
 def validate_output(data):
-    if data["primary_emotion"] not in EMOTIONS:
+    if data.get("primary_emotion") not in EMOTIONS:
         data["primary_emotion"] = "calm"
-    if data["secondary_emotion"] not in EMOTIONS:
+    if data.get("secondary_emotion") not in EMOTIONS:
         data["secondary_emotion"] = data["primary_emotion"]
 
-    data["intensity"] = max(0, min(1, float(data["intensity"])))
-    data["arousal"]   = max(0, min(1, float(data["arousal"])))
-    data["valence"]   = max(-1, min(1, float(data["valence"])))
+    data["intensity"] = max(0, min(1, float(data.get("intensity", 0.5))))
+    data["arousal"]   = max(0, min(1, float(data.get("arousal", 0.5))))
+    data["valence"]   = max(-1, min(1, float(data.get("valence", 0.0))))
 
-    valid_themes = [t for t in data["themes"] if t in THEMES]
+    data["summary"] = data.get("summary", "No summary available.")
+
+    valid_themes = [t for t in data.get("themes", []) if t in THEMES]
     if not valid_themes:
         valid_themes = ["personal_growth"]
     data["themes"] = valid_themes[:4]
@@ -195,44 +196,43 @@ def validate_output(data):
 # ─── Build both rows ──────────────────────────────────────────────────────
 
 def build_row(transcript):
-   # 1. Emotion analysis → journal_entries row
-   analysis = analyze_transcript(transcript)
-   analysis = validate_output(analysis)
+    analysis = analyze_transcript(transcript)
+    analysis = validate_output(analysis)
 
-   journal_entry = {
-       "transcript":        transcript,
-       "summary":           analysis["summary"],
-       "primary_emotion":   analysis["primary_emotion"],
-       "secondary_emotion": analysis["secondary_emotion"],
-       "intensity":         analysis["intensity"],
-       "valence":           analysis["valence"],
-       "arousal":           analysis["arousal"],
-       "themes":            analysis["themes"],
-       "entry_date":        datetime.now().date().isoformat(),
-       "created_at":        datetime.now().isoformat()
-   }
+    now = datetime.now()
 
-   # 2. Theme chunking → theme_embeddings rows
-   chunks = chunk_transcript(transcript)
+    journal_entry = {
+    "transcript":        transcript,
+    "summary":           analysis["summary"],
+    "primary_emotion":   analysis["primary_emotion"],
+    "secondary_emotion": analysis["secondary_emotion"],
+    "intensity":         analysis["intensity"],
+    "valence":           analysis["valence"],
+    "arousal":           analysis["arousal"],
+    "themes":            analysis["themes"],
+    "entry_date":        now.date().isoformat(),
+    "created_at":        now.isoformat()
+    }
 
-   theme_rows = []
-   for c in chunks:
-       theme_rows.append({
-           # journal_id set after inserting journal_entry and getting its uuid
-           "theme":     c["theme"],
-           "chunk":     c["chunk"],
-           "embedding": get_embedding_str(c["chunk"])
-       })
+    chunks = chunk_transcript(transcript)
 
-   return journal_entry, theme_rows
+    theme_rows = []
+    for c in chunks:
+        theme_rows.append({
+            "theme":     c["theme"],
+            "chunk":     c["chunk"],
+            "embedding": get_embedding_str(c["chunk"])
+        })
+
+    return journal_entry, theme_rows
 
 # ─── Test ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
 
    transcript = """
-    Had a rough morning at work, my manager gave me a ton of feedback that felt unfair. I went to the gym after and did a heavy leg day which honestly helped clear my head. Been thinking about whether I should start looking for a new job. On the bright side, my girlfriend and I had a really good conversation tonight about our future together.
-    """
+   Got into a fight with my mom again. She keeps bringing up how I should move closer to home and it drives me crazy. I love her but she doesn't understand that I need my own space. Called my sister after and she helped me calm down. Family stuff is so complicated.
+   """
 
    journal_entry, theme_rows = build_row(transcript)
 
