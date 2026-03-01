@@ -5,7 +5,7 @@
         origin={origin}
         onClose={() => setOpen(false)}
         closeOnBackdrop={false}
-      /> */}
+      />  */}
 // example usage of JournalEntryView ^
 
 import React, { useEffect, useState } from "react";
