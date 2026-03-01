@@ -4,19 +4,22 @@ import CalendarView from "./components/CalendarView";
 import VoiceOverlay from "./components/VoiceOverlay";
 import "./App.css";
 
+// --- Types ---
 export type ViewMode = "sphere" | "month";
 
-export type JournalNode = {
-  id: string;
-  dateISO: string;
-  emotion: "joy" | "sadness" | "anger" | "anxiety" | "calm";
-  intensity: number;
-  snippet?: string;
+const EMOTION_COLORS: Record<string, string> = {
+  happiness: "#4ECDC4",
+  excitement: "#FFD700",
+  calm: "#8a9a5b",
+  anxiety: "#A892EE",
+  stress: "#FF6B6B",
+  sadness: "#5DADE2",
+  anger: "#E74C3C"
 };
 
 function App() {
   const [mode, setMode] = useState<ViewMode>("sphere");
-  // const [activeMonthISO, setActiveMonthISO] = useState("2026-02");
+  const [showLegend, setShowLegend] = useState(false); // NEW STATE
   const activeMonthISO = "2026-02";
   const [isRecording, setIsRecording] = useState(false);
 
@@ -28,6 +31,7 @@ function App() {
       } 
       else if (e.code === "Escape") {
         setIsRecording(false);
+        setShowLegend(false); // Close legend on escape
       }
     };
 
@@ -37,7 +41,6 @@ function App() {
 
   return (
     <div className="app-root">
-      {/* The Iris Transition Overlay */}
       <VoiceOverlay isActive={isRecording} />
 
       <header className="app-header">
@@ -47,7 +50,6 @@ function App() {
       </header>
 
       <main className="app-main">
-        {/* Wrap the graph in a container that fills the main area */}
         <div style={{ 
           display: mode === "sphere" ? "block" : "none", 
           width: '100%', 
@@ -58,16 +60,30 @@ function App() {
 
         <div style={{ 
           display: mode === "month" ? "flex" : "none", 
-          justifyContent: "center",  // ← center horizontally
-          alignItems: "center",      // ← center vertically
+          justifyContent: "center",
+          alignItems: "center",
           width: '100%', 
           height: '100%' 
         }}>
           <CalendarView activeMonthISO={activeMonthISO} />
         </div>
+
+        {/* --- ACTUAL LEGEND OVERLAY --- */}
+        {showLegend && mode === "sphere" && (
+          <div className="legend-popover">
+            <p className="legend-title">Emotions</p>
+            {Object.entries(EMOTION_COLORS).map(([emotion, color]) => (
+              <div key={emotion} className="legend-item">
+                <span className="legend-dot" style={{ backgroundColor: color }} />
+                <span className="legend-label">{emotion}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
 
-      <footer className="app-footer">
+      <footer className="app-footer-wrapper">
+        {/* Toggle View Button (Bottom Left) */}
         <button 
           className="icon-btn toggle-view" 
           onClick={() => setMode(mode === "sphere" ? "month" : "sphere")}
@@ -82,6 +98,18 @@ function App() {
             </svg>
           )}
         </button>
+
+        {/* Legend Toggle Button (Bottom Right) */}
+        {mode === "sphere" && (
+          <button 
+            className={`icon-btn legend-toggle ${showLegend ? 'active' : ''}`}
+            onClick={() => setShowLegend(!showLegend)}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9M3 20h9M4 12h16M12 4h9M3 4h9" />
+            </svg>
+          </button>
+        )}
       </footer>
     </div>
   );
