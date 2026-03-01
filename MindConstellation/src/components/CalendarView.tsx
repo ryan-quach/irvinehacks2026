@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import graphDataRaw from "../data/journal_full_data.json";
+import { supabase } from '../utils/supabaseClient'; //
 import JournalEntryView, {
   type JournalEntry,
   type ScreenPoint,
@@ -23,6 +23,8 @@ interface CalendarProps {
 
 const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
   const [currentView, setCurrentView] = useState(activeMonthISO);
+  const [dbEntries, setDbEntries] = useState<any[]>([]); //
+  const [loading, setLoading] = useState(true); //
 
   // Journal overlay state
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
@@ -30,18 +32,37 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
   const [nodeColor, setNodeColor] = useState("#fff");
   const [clickOrigin, setClickOrigin] = useState<ScreenPoint>({ x: 0, y: 0 });
 
+  // 1. Fetch live entries from Supabase
+  useEffect(() => {
+    const fetchCalendarData = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('journal_entries')
+        .select('*');
+
+      if (error) {
+        console.error("Supabase Error:", error);
+      } else {
+        setDbEntries(data || []);
+      }
+      setLoading(false);
+    };
+
+    fetchCalendarData();
+  }, []);
+
   // Parse year/month
   const [yearStr, monthStr] = currentView.split("-");
   const year = parseInt(yearStr);
   const month = parseInt(monthStr);
 
-  // Group entries by day for the current month
+  // 2. Group live entries by day
   const entriesByDay = useMemo(() => {
-    const raw = (graphDataRaw as any)?.entries ?? [];
     const buckets: Record<number, any[]> = {};
 
-    raw.forEach((entry: any) => {
+    dbEntries.forEach((entry: any) => {
       if (!entry.entry_date) return;
+      // Ensure date is treated as local to prevent timezone shifts
       const d = new Date(entry.entry_date + "T00:00:00");
       if (d.getFullYear() === year && d.getMonth() === month - 1) {
         const day = d.getDate();
@@ -50,7 +71,7 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
     });
 
     return buckets;
-  }, [year, month]);
+  }, [year, month, dbEntries]);
 
   // Count entries + find dominant emotion for subtitle
   const { totalEntries, dominantEmotion } = useMemo(() => {
@@ -92,21 +113,18 @@ const CalendarView: React.FC<CalendarProps> = ({ activeMonthISO }) => {
     const color = EMOTION_COLORS[entry.primary_emotion] || "#fff";
     setClickOrigin({ x: e.clientX, y: e.clientY });
     setNodeColor(color);
-    setSelectedEntry({
-      transcript: entry.transcript ?? "",
-      summary: entry.summary ?? "",
-      primary_emotion: entry.primary_emotion ?? "",
-      secondary_emotion: entry.secondary_emotion ?? "",
-      intensity: entry.intensity ?? 0,
-      valence: entry.valence ?? 0,
-      arousal: entry.arousal ?? 0,
-      themes: entry.themes ?? [],
-      embedding: "",
-      entry_date: entry.entry_date ?? "",
-      created_at: entry.created_at ?? "",
-    });
+    // Directly passing the entry as Supabase columns match the interface
+    setSelectedEntry(entry as JournalEntry);
     setEntryOpen(true);
   };
+
+  if (loading) {
+    return (
+      <div className="calendar-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#666' }}>
+        Loading Constellation Data...
+      </div>
+    );
+  }
 
   return (
     <div className="calendar-container">
