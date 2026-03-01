@@ -1,0 +1,69 @@
+:root {
+  --topbar-h: 56px;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+.app-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #0b0f14; /* tweak later */
+  color: white;
+}
+
+.app-topbar {
+  height: var(--topbar-h);
+  flex: 0 0 var(--topbar-h);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.app-main {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0; /* critical so children can size correctly */
+  overflow: hidden;
+}
+
+.app-center {
+  position: absolute;
+  inset: 0;
+  /* paddingLeft/Right set inline based on panel open states */
+  transition: padding 220ms ease;
+}
+
+/* Panels are overlays that slide in/out */
+.app-left, .app-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+  background: rgba(12, 16, 22, 0.94);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.app-left {
+  left: 0;
+  border-left: none;
+  transform: translateX(-100%);
+  transition: transform 220ms ease;
+}
+
+.app-left.open {
+  transform: translateX(0);
+}
+
+.app-right {
+  right: 0;
+  border-right: none;
+  transform: translateX(100%);
+  transition: transform 220ms ease;
+}
+
+.app-right.open {
+  transform: translateX(0);
+}
