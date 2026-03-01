@@ -163,10 +163,12 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
   // ─── Physics & Visibility Tuning ──────────────────────────────────────────
   useEffect(() => {
     if (!fgRef.current || loading) return;
+
     if (isVisible) {
+      fgRef.current.resumeAnimation();  // ← this was missing
+
       setTimeout(() => {
-        // High repulsion and specific link distance to avoid clumping
-        fgRef.current?.d3Force('charge')?.strength(-150); 
+        fgRef.current?.d3Force('charge')?.strength(-150);
         fgRef.current?.d3Force('link')?.distance(50);
         fgRef.current?.d3Force('collide', (THREE as any).d3ForceCollide(100));
         fgRef.current?.d3ReheatSimulation();
@@ -175,7 +177,7 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
     } else {
       fgRef.current.pauseAnimation();
     }
-  }, [isVisible, loading]);
+}, [isVisible, loading]);
 
   // ─── Interaction Handlers ─────────────────────────────────────────────────
   const handleNodeClick = (node: any, event: MouseEvent) => {
