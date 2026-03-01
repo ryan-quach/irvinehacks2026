@@ -16,7 +16,8 @@ export type JournalNode = {
 
 function App() {
   const [mode, setMode] = useState<ViewMode>("sphere");
-  const [activeMonthISO, setActiveMonthISO] = useState("2026-02");
+  // const [activeMonthISO, setActiveMonthISO] = useState("2026-02");
+  const activeMonthISO = "2026-02";
   const [isRecording, setIsRecording] = useState(false);
 
   useEffect(() => {
@@ -57,6 +58,8 @@ function App() {
 
         <div style={{ 
           display: mode === "month" ? "flex" : "none", 
+          justifyContent: "center",  // ← center horizontally
+          alignItems: "center",      // ← center vertically
           width: '100%', 
           height: '100%' 
         }}>
