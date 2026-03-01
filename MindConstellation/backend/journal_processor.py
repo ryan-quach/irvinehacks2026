@@ -1,31 +1,77 @@
-# run ollama pull lamma3.2
+# run ollama pull llama3.2
+# run ollama pull all-minilm
+# pip install numpy
 
 import ollama
 import json
+import numpy as np
+import re
 from datetime import datetime
+from collections import OrderedDict
 
 LLM_MODEL = "llama3.2"
 EMBED_MODEL = "all-minilm"
 
 EMOTIONS = [
-    "happiness",
-    "sadness",
-    "stress",
-    "calm",
-    "anxiety",
-    "excitement",
-    "anger"
+   "happiness", "sadness", "stress", "calm",
+   "anxiety", "excitement", "anger"
 ]
 
+# THEMES = [
+#    "growth", "work", "fitness", "school",
+#    "sleep", "stress", "relationships"
+# ]
+
+# THEME_DESCRIPTIONS = {
+#    "growth": "goals, self-improvement, learning, motivation, habits, discipline, mindset, ambition, purpose",
+#    "work": "career, job, workplace, manager, coworkers, professional life, meetings, deadlines, projects",
+#    "fitness": "exercise, gym, workout, physical health, sports, running, lifting, training, cardio",
+#    "school": "classes, homework, exams, studying, professors, lectures, grades, assignments, campus",
+#    "sleep": "rest, naps, insomnia, tired, bedtime, waking up, dreams, fatigue, energy levels",
+#    "stress": "pressure, overwhelm, burnout, tension, anxiety, coping, deadlines, mental load, breaking point",
+#    "relationships": "partner, girlfriend, boyfriend, family, friends, social life, love, connection, conversations",
+# }
 THEMES = [
-    "growth",
-    "work",
-    "fitness",
-    "school",
-    "sleep",
-    "stress",
-    "relationships"
+    "work", "fitness", "relationships", "mental_health",
+    "family", "finances", "friendships", "hobbies",
+    "health", "personal_growth"
 ]
+
+THEME_DESCRIPTIONS = {
+    "work": "career, job, workplace, manager, coworkers, professional life, meetings, deadlines, projects",
+    "fitness": "exercise, gym, workout, physical health, sports, running, lifting, training, cardio",
+    "relationships": "partner, girlfriend, boyfriend, spouse, romance, love, dating, intimacy, commitment",
+    "mental_health": "anxiety, depression, stress, emotions, therapy, self-esteem, mood, overwhelm, burnout",
+    "family": "parents, siblings, children, relatives, home life, family dynamics, upbringing, household",
+    "finances": "money, budget, savings, debt, spending, income, bills, financial goals, investments",
+    "friendships": "friends, social life, hanging out, loneliness, connection, support system, social events",
+    "hobbies": "creative outlets, interests, passions, music, art, gaming, reading, side projects, fun",
+    "health": "sleep, nutrition, diet, illness, doctor, medication, energy, physical wellbeing, recovery",
+    "personal_growth": "goals, self-improvement, learning, motivation, habits, discipline, mindset, ambition, purpose",
+}
+
+
+# ─── Helpers ───────────────────────────────────────────────────────────────
+
+def cosine_similarity(a, b):
+   a, b = np.array(a), np.array(b)
+   return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+def split_sentences(text):
+   """Split text into sentences on .!? boundaries."""
+   return [s.strip() for s in re.split(r'(?<=[.!?])\s+', text.strip()) if s.strip()]
+
+def get_embedding_raw(text):
+   """Return embedding as a Python list (for cosine math)."""
+   response = ollama.embeddings(model=EMBED_MODEL, prompt=text)
+   return response["embedding"]
+
+def get_embedding_str(text):
+   """Return embedding as a Supabase-ready string."""
+   vector = get_embedding_raw(text)
+   return "[" + ",".join(str(float(x)) for x in vector) + "]"
+
+# ─── Analyze emotions (LLM) ───────────────────────────────────────────────
 
 def analyze_transcript(transcript):
     prompt = f"""
@@ -45,77 +91,164 @@ Return JSON only. No explanation.
 Transcript:
 \"\"\"{transcript}\"\"\"
 """
-
     response = ollama.chat(
         model=LLM_MODEL,
         messages=[{"role": "user", "content": prompt}]
     )
+    content = response["message"]["content"].strip()
 
-    content = response["message"]["content"]
+    # Strip markdown fences
+    if content.startswith("```"):
+        content = content.split("\n", 1)[1]
+        content = content.rsplit("```", 1)[0].strip()
 
+    # Try parsing, retry once on failure
     try:
         data = json.loads(content)
-    except:
-        raise Exception("Model did not return valid JSON:\n" + content)
+    except json.JSONDecodeError:
+        # Ask the model to fix its own JSON
+        fix_response = ollama.chat(
+            model=LLM_MODEL,
+            messages=[
+                {"role": "user", "content": f"Fix this broken JSON. Return ONLY valid JSON, nothing else:\n{content}"}
+            ]
+        )
+        fix_content = fix_response["message"]["content"].strip()
+
+        if fix_content.startswith("```"):
+            fix_content = fix_content.split("\n", 1)[1]
+            fix_content = fix_content.rsplit("```", 1)[0].strip()
+
+        try:
+            data = json.loads(fix_content)
+        except json.JSONDecodeError as e:
+            raise Exception(f"Model did not return valid JSON even after retry:\n{fix_content}\n\nError: {e}")
 
     return data
 
-def get_embedding(text):
-    response = ollama.embeddings(
-        model=EMBED_MODEL,
-        prompt=text
-    )
-    vector = response["embedding"]
+# ─── Chunk transcript by theme (EMBEDDINGS) ───────────────────────────────
 
-    return "[" + ",".join(str(float(x)) for x in vector) + "]"
+# A sentence is added to a second (or third) theme if its similarity
+# is within this margin of the best theme's score.
+MULTI_THEME_MARGIN = 0.05
+
+def chunk_transcript(transcript):
+    # 1. Embed each theme description once
+    theme_embeddings = {
+        theme: get_embedding_raw(desc)
+        for theme, desc in THEME_DESCRIPTIONS.items()
+    }
+
+    # 2. Split transcript into sentences
+    sentences = split_sentences(transcript)
+
+    if not sentences:
+        return [{"theme": "personal_growth", "chunk": transcript.strip()}]
+
+    # 3. Classify each sentence — allow multiple themes
+    grouped = OrderedDict()
+    for sentence in sentences:
+        sentence_emb = get_embedding_raw(sentence)
+
+        scores = {
+            theme: cosine_similarity(sentence_emb, theme_emb)
+            for theme, theme_emb in theme_embeddings.items()
+        }
+
+        best_score = max(scores.values())
+        threshold = best_score - MULTI_THEME_MARGIN
+
+        matched_themes = [t for t, s in scores.items() if s >= threshold]
+
+        for theme in matched_themes:
+            if theme not in grouped:
+                grouped[theme] = []
+            grouped[theme].append(sentence)
+
+    # 4. Merge into one chunk per theme
+    chunks = [
+        {"theme": theme, "chunk": " ".join(sents)}
+        for theme, sents in grouped.items()
+    ]
+
+    return chunks
+
+# ─── Validation ────────────────────────────────────────────────────────────
 
 def validate_output(data):
-
     if data["primary_emotion"] not in EMOTIONS:
         data["primary_emotion"] = "calm"
-
     if data["secondary_emotion"] not in EMOTIONS:
         data["secondary_emotion"] = data["primary_emotion"]
 
     data["intensity"] = max(0, min(1, float(data["intensity"])))
-    data["arousal"] = max(0, min(1, float(data["arousal"])))
-    data["valence"] = max(-1, min(1, float(data["valence"])))
+    data["arousal"]   = max(0, min(1, float(data["arousal"])))
+    data["valence"]   = max(-1, min(1, float(data["valence"])))
 
     valid_themes = [t for t in data["themes"] if t in THEMES]
-    if len(valid_themes) == 0:
-        valid_themes = ["growth"]
-
-    data["themes"] = valid_themes[:3]
+    if not valid_themes:
+        valid_themes = ["personal_growth"]
+    data["themes"] = valid_themes[:4]
 
     return data
 
+# ─── Build both rows ──────────────────────────────────────────────────────
+
 def build_row(transcript):
-    analysis = analyze_transcript(transcript)
-    analysis = validate_output(analysis)
-    embedding = get_embedding(transcript)
+   # 1. Emotion analysis → journal_entries row
+   analysis = analyze_transcript(transcript)
+   analysis = validate_output(analysis)
 
-    row = {
-        "transcript": transcript,
-        "summary": analysis["summary"],
-        "primary_emotion": analysis["primary_emotion"],
-        "secondary_emotion": analysis["secondary_emotion"],
-        "intensity": analysis["intensity"],
-        "valence": analysis["valence"],
-        "arousal": analysis["arousal"],
-        "themes": analysis["themes"],
-        "embedding": embedding,
-        "entry_date": datetime.now().date().isoformat(),
-        "created_at": datetime.now().isoformat()
-    }
+   journal_entry = {
+       "transcript":        transcript,
+       "summary":           analysis["summary"],
+       "primary_emotion":   analysis["primary_emotion"],
+       "secondary_emotion": analysis["secondary_emotion"],
+       "intensity":         analysis["intensity"],
+       "valence":           analysis["valence"],
+       "arousal":           analysis["arousal"],
+       "themes":            analysis["themes"],
+       "entry_date":        datetime.now().date().isoformat(),
+       "created_at":        datetime.now().isoformat()
+   }
 
-    return row
+   # 2. Theme chunking → theme_embeddings rows
+   chunks = chunk_transcript(transcript)
+
+   theme_rows = []
+   for c in chunks:
+       theme_rows.append({
+           # journal_id set after inserting journal_entry and getting its uuid
+           "theme":     c["theme"],
+           "chunk":     c["chunk"],
+           "embedding": get_embedding_str(c["chunk"])
+       })
+
+   return journal_entry, theme_rows
+
+# ─── Test ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
 
-    transcript = """
-    Calm day reflecting on past month. Schoolwork done, focus on planning future tasks.
+   transcript = """
+    Had a rough morning at work, my manager gave me a ton of feedback that felt unfair. I went to the gym after and did a heavy leg day which honestly helped clear my head. Been thinking about whether I should start looking for a new job. On the bright side, my girlfriend and I had a really good conversation tonight about our future together.
     """
 
-    row = build_row(transcript)
+   journal_entry, theme_rows = build_row(transcript)
 
-    print(json.dumps(row, indent=2))
+   print("=== JOURNAL ENTRY ===")
+   print(json.dumps(journal_entry, indent=2))
+
+   print("\n=== THEME EMBEDDINGS ===")
+   for i, row in enumerate(theme_rows):
+       preview = {
+           "theme": row["theme"],
+           "chunk": row["chunk"],
+           "embedding": row["embedding"][:50] + "..."
+       }
+       print(f"  chunk {i+1}: {json.dumps(preview, indent=4)}")
+
+
+
+
+
