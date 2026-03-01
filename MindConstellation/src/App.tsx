@@ -46,11 +46,22 @@ function App() {
       </header>
 
       <main className="app-main">
-        {mode === "sphere" ? (
-          <GraphView mode={mode} />
-        ) : (
+        {/* Wrap the graph in a container that fills the main area */}
+        <div style={{ 
+          display: mode === "sphere" ? "block" : "none", 
+          width: '100%', 
+          height: '100%' 
+        }}>
+          <GraphView isVisible={mode === "sphere"} />
+        </div>
+
+        <div style={{ 
+          display: mode === "month" ? "flex" : "none", 
+          width: '100%', 
+          height: '100%' 
+        }}>
           <CalendarView activeMonthISO={activeMonthISO} />
-        )}
+        </div>
       </main>
 
       <footer className="app-footer">
