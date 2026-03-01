@@ -173,7 +173,7 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
         fgRef.current?.refresh();
       }, 50);
     } else {
-      fgRef.current.stopAnimation();
+      fgRef.current.pauseAnimation();
     }
   }, [isVisible, loading]);
 
