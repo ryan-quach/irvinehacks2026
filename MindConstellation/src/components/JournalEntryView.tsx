@@ -1,19 +1,22 @@
-{/* <JournalEntryView
-        open={open}
-        entry={entry}
-        color={nodeColor}
-        origin={origin}
-        onClose={() => setOpen(false)}
-        closeOnBackdrop={false}
-      />  */}
-// example usage of JournalEntryView ^
-
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import "./JournalEntryView.css";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const EMOTION_COLORS: Record<string, string> = {
+  happiness: "#4ECDC4",
+  excitement: "#FFD700",
+  calm: "#8a9a5b",
+  anxiety: "#A892EE",
+  stress: "#FF6B6B",
+  sadness: "#5DADE2",
+  anger: "#E74C3C",
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type JournalEntry = {
+  id?: string;
   transcript: string;
   summary: string;
   primary_emotion: string;
@@ -21,7 +24,7 @@ export type JournalEntry = {
   intensity: number;
   valence: number;
   arousal: number;
-  themes: string[];
+  themes: string[] | string;
   embedding: string;
   entry_date: string;
   created_at: string;
@@ -36,13 +39,10 @@ type Props = {
   origin: ScreenPoint;
   onClose: () => void;
   closeOnBackdrop?: boolean;
+  allEntries?: any[];
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function clamp01(n: number): number {
-  return Math.max(0, Math.min(1, n));
-}
 
 function formatEntryDate(dateStr: string): string {
   try {
@@ -59,66 +59,183 @@ function formatEntryDate(dateStr: string): string {
   }
 }
 
-// ─── Affect Map ───────────────────────────────────────────────────────────────
+function parseThemes(raw: any): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return typeof raw === "string"
+      ? raw.split(",").map((s: string) => s.trim())
+      : [];
+  }
+}
 
-function AffectMap({
-  valence,
-  arousal,
-  color,
+// ─── TimeChart ────────────────────────────────────────────────────────────────
+
+function TimeChart({
+  entries,
+  field,
+  label,
+  currentEntryId,
+  onHover,
+  onLeave,
 }: {
-  valence: number;
-  arousal: number;
-  color: string;
+  entries: any[];
+  field: "valence" | "arousal";
+  label: string;
+  currentEntryId?: string;
+  onHover: (entry: any, x: number, y: number) => void;
+  onLeave: () => void;
 }) {
-  const x = clamp01((valence + 1) / 2);
-  const y = clamp01(1 - arousal);
+  if (entries.length === 0) {
+    return (
+      <div className="jev-chart">
+        <span className="jev-chart-label">{label}</span>
+        <div className="jev-chart-empty">No entries with this theme</div>
+      </div>
+    );
+  }
 
-  return (
-    <div className="jev-affect-wrap">
-      <div className="jev-affect-ylabels">
-        <span>active</span>
-        <span>calm</span>
-      </div>
-      <div className="jev-affect-right">
-        <div className="jev-affect-map">
-          <div className="jev-affect-axis jev-affect-axis--h" />
-          <div className="jev-affect-axis jev-affect-axis--v" />
-          <div
-            className="jev-affect-dot"
-            style={{
-              left: `${x * 100}%`,
-              top: `${y * 100}%`,
-              background: color,
-              boxShadow: `0 0 0 5px ${color}28`,
-            }}
-          />
-        </div>
-        <div className="jev-affect-xlabels">
-          <span>unpleasant</span>
-          <span>pleasant</span>
-        </div>
-      </div>
-    </div>
+  const W = 600;
+  const H = 180;        // ← taller to fit date labels
+  const PX = 36;
+  const PY = 24;
+  const PB = 40;         // extra bottom padding for dates
+
+  const sorted = [...entries].sort(
+    (a, b) =>
+      new Date(a.entry_date + "T00:00:00").getTime() -
+      new Date(b.entry_date + "T00:00:00").getTime()
   );
-}
 
-// ─── Intensity Bar ────────────────────────────────────────────────────────────
+  const dates = sorted.map((e) =>
+    new Date(e.entry_date + "T00:00:00").getTime()
+  );
+  const minDate = Math.min(...dates);
+  const maxDate = Math.max(...dates);
+  const dateRange = maxDate - minDate || 86400000;
 
-function IntensityBar({ value, color }: { value: number; color: string }) {
-  const v = clamp01(value);
+  const minVal = field === "valence" ? -1 : 0;
+  const maxVal = 1;
+  const midVal = (minVal + maxVal) / 2;
+
+  const sx = (d: number) =>
+    PX + ((d - minDate) / dateRange) * (W - 2 * PX);
+  const sy = (v: number) =>
+    PY + ((maxVal - v) / (maxVal - minVal)) * (H - PY - PB);
+
+  const pathD = sorted
+    .map(
+      (e, i) =>
+        `${i === 0 ? "M" : "L"} ${sx(dates[i])} ${sy(e[field] ?? 0)}`
+    )
+    .join(" ");
+
+  // Decide which date labels to show (thin out if > 8 dots)
+  const maxLabels = 8;
+  const step = Math.ceil(sorted.length / maxLabels);
+
   return (
-    <div className="jev-intensity-row">
-      <div className="jev-bar-track">
-        <div
-          className="jev-bar-fill"
-          style={{ width: `${v * 100}%`, background: color }}
+    <div className="jev-chart">
+      <span className="jev-chart-label">{label}</span>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+        {/* Grid lines */}
+        <line
+          x1={PX} y1={sy(maxVal)} x2={W - PX} y2={sy(maxVal)}
+          stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"
         />
-      </div>
-      <span className="jev-bar-value">{Math.round(v * 100)}</span>
+        <line
+          x1={PX} y1={sy(midVal)} x2={W - PX} y2={sy(midVal)}
+          stroke="rgba(255,255,255,0.08)" strokeWidth="0.5"
+          strokeDasharray="4 4"
+        />
+        <line
+          x1={PX} y1={sy(minVal)} x2={W - PX} y2={sy(minVal)}
+          stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"
+        />
+
+        {/* X axis baseline */}
+        <line
+          x1={PX} y1={H - PB + 10} x2={W - PX} y2={H - PB + 10}
+          stroke="rgba(255,255,255,0.06)" strokeWidth="0.5"
+        />
+
+        {/* Y labels */}
+        <text x={6} y={sy(maxVal) + 4} fill="#444" fontSize="9">{maxVal}</text>
+        <text x={6} y={sy(midVal) + 4} fill="#555" fontSize="9">{midVal}</text>
+        <text x={6} y={sy(minVal) + 4} fill="#444" fontSize="9">{minVal}</text>
+
+        {/* Connecting line */}
+        {sorted.length > 1 && (
+          <path
+            d={pathD}
+            fill="none"
+            stroke="rgba(255,255,255,0.12)"
+            strokeWidth="1.5"
+          />
+        )}
+
+        {/* Dots + date labels */}
+        {sorted.map((e, i) => {
+          const isCurrent = e.id === currentEntryId;
+          const cx = sx(dates[i]);
+          const cy = sy(e[field] ?? 0);
+
+          const showLabel = i % step === 0 || i === sorted.length - 1;
+
+          const dateLabel = new Date(
+            e.entry_date + "T00:00:00"
+          ).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          });
+
+          return (
+            <g key={e.id ?? i}>
+              {/* Tick mark */}
+              {showLabel && (
+                <line
+                  x1={cx} y1={H - PB + 6}
+                  x2={cx} y2={H - PB + 14}
+                  stroke="rgba(255,255,255,0.1)"
+                  strokeWidth="0.5"
+                />
+              )}
+
+              {/* Date label */}
+              {showLabel && (
+                <text
+                  x={cx}
+                  y={H - PB + 26}
+                  fill="#444"
+                  fontSize="8"
+                  textAnchor="middle"
+                >
+                  {dateLabel}
+                </text>
+              )}
+
+              {/* Dot */}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={isCurrent ? 7 : 5}
+                fill={EMOTION_COLORS[e.primary_emotion] || "#555"}
+                stroke={isCurrent ? "#fff" : "none"}
+                strokeWidth={isCurrent ? 2 : 0}
+                style={{ cursor: "pointer" }}
+                onMouseEnter={(ev) => onHover(e, ev.clientX, ev.clientY)}
+                onMouseLeave={onLeave}
+              />
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function JournalEntryView({
@@ -128,17 +245,24 @@ export default function JournalEntryView({
   origin,
   onClose,
   closeOnBackdrop = false,
+  allEntries = [],
 }: Props) {
   const [isMounted, setIsMounted] = useState(false);
   const [phase, setPhase] = useState<
     "enter" | "filling" | "reveal" | "shown" | "exit" | "exit-shrink"
-    >("enter");
+  >("enter");
 
   const [stickyEntry, setStickyEntry] = useState<JournalEntry | null>(null);
   const [stickyColor, setStickyColor] = useState(color);
   const [stickyOrigin, setStickyOrigin] = useState(origin);
+  const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{
+    entry: any;
+    x: number;
+    y: number;
+  } | null>(null);
 
-  // ── Animation lifecycle ────────────────────────────────────────────────────
+  // ── Animation lifecycle (unchanged) ────────────────────────────────────────
   useEffect(() => {
     if (open && entry) {
       setStickyEntry(entry);
@@ -147,11 +271,12 @@ export default function JournalEntryView({
       setIsMounted(true);
       setPhase("enter");
 
-      // 1) kick off the color flood
+      // Auto-select first theme
+      const themes = parseThemes(entry.themes);
+      if (themes.length > 0) setSelectedTheme(themes[0]);
+
       const t1 = setTimeout(() => setPhase("filling"), 10);
-      // 2) once flood has settled to black, fade content in
       const t2 = setTimeout(() => setPhase("reveal"), 2000);
-      // 3) done
       const t3 = setTimeout(() => setPhase("shown"), 250);
 
       return () => {
@@ -162,20 +287,20 @@ export default function JournalEntryView({
     }
 
     if (!open && isMounted) {
-        setPhase("exit");                                           // content fades out
-        const t1 = setTimeout(() => setPhase("exit-shrink"), 100);  // flood reverses
-        const t2 = setTimeout(() => {
-            setIsMounted(false);
-            setStickyEntry(null);
-        }, 2000);
-        return () => {
-            clearTimeout(t1);
-            clearTimeout(t2);
-        };
+      setPhase("exit");
+      const t1 = setTimeout(() => setPhase("exit-shrink"), 100);
+      const t2 = setTimeout(() => {
+        setIsMounted(false);
+        setStickyEntry(null);
+      }, 2000);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
   }, [open, entry, color, origin, isMounted]);
 
-  // ── ESC to close ───────────────────────────────────────────────────────────
+  // ── ESC to close (unchanged) ───────────────────────────────────────────────
   useEffect(() => {
     if (!isMounted) return;
     const handler = (e: KeyboardEvent) => {
@@ -185,11 +310,31 @@ export default function JournalEntryView({
     return () => window.removeEventListener("keydown", handler);
   }, [isMounted, onClose]);
 
-  if (!isMounted || !stickyEntry) return null;
+  // ── Derived data ───────────────────────────────────────────────────────────
+  const themes = useMemo(
+    () => parseThemes(stickyEntry?.themes),
+    [stickyEntry?.themes]
+  );
 
-  const intensity = clamp01(stickyEntry.intensity);
-  const arousal = clamp01(stickyEntry.arousal);
-  const valence = Math.max(-1, Math.min(1, stickyEntry.valence));
+  const themeEntries = useMemo(() => {
+    if (!selectedTheme) return stickyEntry ? [stickyEntry] : [];
+
+    const filtered = allEntries.filter((e) =>
+      parseThemes(e.themes).includes(selectedTheme)
+    );
+
+    // Ensure current entry is included even if allEntries is empty
+    if (
+      stickyEntry?.id &&
+      !filtered.find((e) => e.id === stickyEntry.id)
+    ) {
+      filtered.push(stickyEntry);
+    }
+
+    return filtered;
+  }, [selectedTheme, allEntries, stickyEntry]);
+
+  if (!isMounted || !stickyEntry) return null;
 
   return (
     <div
@@ -205,14 +350,15 @@ export default function JournalEntryView({
       aria-modal="true"
       onClick={(e) => e.stopPropagation()}
     >
-      {/* ── Color flood — expands from click point, fades node-color → black ── */}
+      {/* ── Color flood (unchanged) ── */}
       <div
         className="jev-flood"
         onClick={() => closeOnBackdrop && onClose()}
       />
 
-      {/* ── Content surface — fades in once flood settles ── */}
+      {/* ── Content surface ── */}
       <div className="jev-surface">
+        {/* Header (unchanged) */}
         <header className="jev-header">
           <button className="jev-back" onClick={onClose} aria-label="Back">
             <svg
@@ -252,54 +398,74 @@ export default function JournalEntryView({
           </div>
         </header>
 
+        {/* ── Body — single scrollable column ── */}
         <div className="jev-body">
-          {/* LEFT — transcript */}
-          <section className="jev-col-transcript">
+          <section className="jev-content-section">
+            <p className="jev-section-label">Summary</p>
+            <p className="jev-summary">{stickyEntry.summary}</p>
+          </section>
+
+          <section className="jev-content-section">
             <p className="jev-section-label">Entry</p>
             <div className="jev-transcript">{stickyEntry.transcript}</div>
           </section>
 
-          {/* RIGHT — insights */}
-          <aside className="jev-col-insights">
-            <div className="jev-insight-block">
-              <p className="jev-section-label">Summary</p>
-              <p className="jev-summary">{stickyEntry.summary}</p>
-            </div>
-
-            <div className="jev-insight-block">
-              <p className="jev-section-label">Affect space</p>
-              <AffectMap
-                valence={valence}
-                arousal={arousal}
-                color={stickyColor}
-              />
-            </div>
-
-            <div className="jev-insight-block">
-              <p className="jev-section-label">Intensity</p>
-              <IntensityBar value={intensity} color={stickyColor} />
-            </div>
-
-            {stickyEntry.themes?.length > 0 && (
-              <div className="jev-insight-block">
-                <p className="jev-section-label">Themes</p>
-                <div className="jev-chips">
-                  {stickyEntry.themes.map((theme) => (
-                    <span key={theme} className="jev-chip">
-                      {theme}
-                    </span>
-                  ))}
-                </div>
+          {themes.length > 0 && (
+            <section className="jev-content-section">
+              <p className="jev-section-label">Themes</p>
+              <div className="jev-theme-buttons">
+                {themes.map((theme) => (
+                  <button
+                    key={theme}
+                    className={`jev-theme-btn ${
+                      selectedTheme === theme ? "active" : ""
+                    }`}
+                    onClick={() => setSelectedTheme(theme)}
+                  >
+                    {theme.replace(/_/g, " ")}
+                  </button>
+                ))}
               </div>
-            )}
+            </section>
+          )}
 
-            <div className="jev-insight-block jev-insight-block--meta">
-              <span className="jev-section-label">created</span>
-              <span className="jev-mono">{stickyEntry.created_at}</span>
-            </div>
-          </aside>
+          {selectedTheme && (
+            <section className="jev-content-section jev-charts-section">
+              <TimeChart
+                entries={themeEntries}
+                field="valence"
+                label="VALENCE OVER TIME"
+                currentEntryId={stickyEntry.id}
+                onHover={(e, x, y) => setTooltip({ entry: e, x, y })}
+                onLeave={() => setTooltip(null)}
+              />
+              <TimeChart
+                entries={themeEntries}
+                field="arousal"
+                label="AROUSAL OVER TIME"
+                currentEntryId={stickyEntry.id}
+                onHover={(e, x, y) => setTooltip({ entry: e, x, y })}
+                onLeave={() => setTooltip(null)}
+              />
+            </section>
+          )}
+
+          <div className="jev-content-section jev-meta-footer">
+            <span className="jev-section-label">created</span>
+            <span className="jev-mono">{stickyEntry.created_at}</span>
+          </div>
         </div>
       </div>
+
+      {/* ── Tooltip ── */}
+      {tooltip && (
+        <div
+          className="jev-tooltip"
+          style={{ left: tooltip.x + 16, top: tooltip.y - 16 }}
+        >
+          <p className="jev-tooltip-summary">{tooltip.entry?.summary}</p>
+        </div>
+      )}
     </div>
   );
 }

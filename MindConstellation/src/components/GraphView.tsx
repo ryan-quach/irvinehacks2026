@@ -85,10 +85,18 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
       });
 
       // 2. Build Node Objects
-      const nodes: GraphNode[] = entries.map((entry: any) => ({
+      // const nodes: GraphNode[] = entries.map((entry: any) => ({
+      //   ...entry,
+      //   themeMap: nodeEmbeddingsMap.get(entry.id) || new Map()
+      // }));
+      const nodes: GraphNode[] = entries.map((entry: any) => {
+      const themeMap = nodeEmbeddingsMap.get(entry.id) || new Map();
+      return {
         ...entry,
-        themeMap: nodeEmbeddingsMap.get(entry.id) || new Map()
-      }));
+        themeMap,
+        themes: Array.from(themeMap.keys()),  // ← override with ALL themes
+      };
+    });
 
       // 3. Build Links (Connectivity + Top-K Strategy)
       const links: GraphLink[] = [];
@@ -182,7 +190,7 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
   // ─── Interaction Handlers ─────────────────────────────────────────────────
   const handleNodeClick = (node: any, event: MouseEvent) => {
     setClickOrigin({ x: event.clientX, y: event.clientY });
-    setSelectedEntry(node as JournalEntry);
+    setSelectedEntry(node as JournalEntry);  // node already has .id from Supabase
     setNodeColor(EMOTION_COLORS[node.primary_emotion] || "#ffffff");
     setEntryOpen(true);
   };
@@ -231,7 +239,8 @@ const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
         color={nodeColor}
         origin={clickOrigin}
         onClose={() => setEntryOpen(false)}
-        closeOnBackdrop
+        closeOnBackdrop={false}
+        allEntries={graphData.nodes}
       />
     </div>
   );
