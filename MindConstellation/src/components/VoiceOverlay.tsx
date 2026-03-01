@@ -96,12 +96,26 @@ const VoiceOverlay: React.FC<VoiceOverlayProps> = ({ isActive }) => {
         setStatus("error");
       }
     } else {
-      // All rounds done — session complete
-      setStatus("idle");
+      // All rounds done — process the full transcript
       if (currentRound >= MAX_ROUNDS && currentTranscript.trim()) {
-        console.log("=== FULL SESSION TRANSCRIPT ===");
-        console.log(currentTranscript);
-        console.log("===============================");
+        setStatus("saving" as any);
+        try {
+          const res = await fetch("http://localhost:8000/process-transcript", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript: currentTranscript }),
+          });
+          const row = await res.json();
+          console.log("=== JOURNAL ROW ===");
+          console.log(JSON.stringify(row, null, 2));
+          console.log("==================");
+          setStatus("saved" as any);
+        } catch (err) {
+          console.error("process-transcript error:", err);
+          setStatus("error");
+        }
+      } else {
+        setStatus("idle");
       }
     }
   };
@@ -197,15 +211,19 @@ const VoiceOverlay: React.FC<VoiceOverlayProps> = ({ isActive }) => {
       ? "CONNECTING..."
       : status === "thinking"
         ? "THINKING..."
-        : status === "error"
-          ? "ERROR – CHECK CONSOLE"
-          : isListening
-            ? "RECORDING... (PRESS MIC TO PAUSE)"
-            : round >= MAX_ROUNDS
-              ? "SESSION COMPLETE"
-              : followUp
-                ? "PRESS MIC TO RESPOND"
-                : "CLICK MIC TO START";
+        : (status as string) === "saving"
+          ? "SAVING..."
+          : (status as string) === "saved"
+            ? "SAVED ✓"
+            : status === "error"
+              ? "ERROR – CHECK CONSOLE"
+              : isListening
+                ? "RECORDING... (PRESS MIC TO PAUSE)"
+                : round >= MAX_ROUNDS
+                  ? "SESSION COMPLETE"
+                  : followUp
+                    ? "PRESS MIC TO RESPOND"
+                    : "CLICK MIC TO START";
 
   const micColor = isListening
     ? "#ff4b4b"
@@ -303,33 +321,7 @@ const VoiceOverlay: React.FC<VoiceOverlayProps> = ({ isActive }) => {
           )}
         </AnimatePresence>
 
-        {/* Full transcript shown at session end */}
-        <AnimatePresence>
-          {round >= MAX_ROUNDS && !isListening && transcript.trim() && (
-            <motion.div
-              key="final-transcript"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.6 }}
-              style={{
-                marginTop: "32px",
-                padding: "16px 20px",
-                background: "#111",
-                borderRadius: "10px",
-                border: "1px solid #222",
-                textAlign: "left",
-              }}
-            >
-              <p style={{ fontSize: "0.6rem", letterSpacing: "2px", color: "#444", marginBottom: "10px" }}>
-                FULL TRANSCRIPT
-              </p>
-              <p style={{ color: "#bbb", fontSize: "0.9rem", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-                {transcript}
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
 
         {/* Round indicator dots */}
         <div style={{ marginTop: "48px", display: "flex", gap: "8px", justifyContent: "center" }}>

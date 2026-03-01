@@ -8,12 +8,17 @@ import os
 import sys
 import asyncio
 import numpy as np
+import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from faster_whisper import WhisperModel
 
-# Reach up to irvinehacks2026/ so transcript.py is importable if needed
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# Ensure this file's directory (backend/) is on the path so journal_processor is importable
+# regardless of where uvicorn is launched from.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from journal_processor import build_row
+
 
 # --- Whisper model (loaded once at startup) ---
 model = WhisperModel("base", device="cpu", compute_type="int8")
@@ -42,6 +47,22 @@ def transcribe_segment(audio: np.ndarray) -> str:
         clip_timestamps=[0, len(audio) / SAMPLE_RATE],
     )
     return " ".join(s.text for s in segments).strip()
+
+
+class TranscriptRequest(BaseModel):
+    transcript: str
+
+
+@app.post("/process-transcript")
+async def process_transcript(req: TranscriptRequest):
+    """Run journal_processor.build_row on the full session transcript.
+    Prints the result to the server console and returns it as JSON."""
+    loop = asyncio.get_event_loop()
+    row = await loop.run_in_executor(None, build_row, req.transcript)
+    print("\n=== JOURNAL ROW ===")
+    print(json.dumps(row, indent=2))
+    print("==================\n")
+    return row
 
 
 @app.websocket("/ws/transcribe")
