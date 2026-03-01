@@ -1,109 +1,74 @@
-import { useMemo, useState } from "react";
-import TopBar from "./components/TopBar";
+import { useState, useEffect } from "react";
 import GraphView from "./components/GraphView";
-import RightPanel from "./components/RightPanel";
-import LeftPanel from "./components/LeftPanel";
+import CalendarView from "./components/CalendarView";
+import VoiceOverlay from "./components/VoiceOverlay";
 import "./App.css";
 
 export type ViewMode = "sphere" | "month";
 
 export type JournalNode = {
   id: string;
-  dateISO: string; // "2026-02-28"
+  dateISO: string;
   emotion: "joy" | "sadness" | "anger" | "anxiety" | "calm";
-  intensity: number; // 0..1
+  intensity: number;
   snippet?: string;
 };
 
 function App() {
-  // UI state
   const [mode, setMode] = useState<ViewMode>("sphere");
-  const [rightOpen, setRightOpen] = useState(true); // start open for usability
-  const [leftOpen, setLeftOpen] = useState(false);
-  const [selectedNode, setSelectedNode] = useState<JournalNode | null>(null);
+  const [activeMonthISO, setActiveMonthISO] = useState("2026-02");
+  const [isRecording, setIsRecording] = useState(false);
 
-  // Calendar state (month mode)
-  const [activeMonthISO, setActiveMonthISO] = useState<string>(() => {
-    // default to current month-ish; for hackathon you can hardcode
-    return "2026-02";
-  });
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        setIsRecording((prev) => !prev);
+      } 
+      else if (e.code === "Escape") {
+        setIsRecording(false);
+      }
+    };
 
-  // When a node is clicked in the graph
-  const handleSelectNode = (node: JournalNode | null) => {
-    setSelectedNode(node);
-    setLeftOpen(Boolean(node)); // open left panel if something selected
-  };
-
-  // When calendar icon toggled
-  const toggleMonthMode = () => {
-    setMode((prev) => (prev === "sphere" ? "month" : "sphere"));
-    setRightOpen(false);
-    setLeftOpen(false);
-  };
-
-  // tweak these based on what it acutally looks like
-  const LEFT_W = 320; 
-  const RIGHT_W = 360;
-
-  const centerStyle = useMemo(() => {
-    const leftPad = leftOpen ? LEFT_W : 0;
-    const rightPad = rightOpen ? RIGHT_W : 0;
-
-    return {
-      paddingLeft: leftPad,
-      paddingRight: rightPad,
-    } as React.CSSProperties;
-  }, [leftOpen, rightOpen]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <div className="app-root">
-      {/* Top bar */}
-      <div className="app-topbar">
-        <TopBar
-          mode={mode}
-          onToggleMode={toggleMonthMode}
-          activeMonthISO={activeMonthISO}
-          onMonthChange={setActiveMonthISO}
-          rightOpen={rightOpen}
-          onToggleRight={() => setRightOpen((v) => !v)}
-        />
-      </div>
+      {/* The Iris Transition Overlay */}
+      <VoiceOverlay isActive={isRecording} />
 
-      {/* Main content area (fills remaining height) */}
-      <div className="app-main">
-        {/* Center canvas (graph) */}
-        <div className="app-center" style={centerStyle}>
-          <GraphView
-            mode={mode}
-            activeMonthISO={activeMonthISO}
-            selectedNodeId={selectedNode?.id ?? null}
-            onSelectNode={handleSelectNode}
-          />
-        </div>
+      <header className="app-header">
+        <h1 className="logo">
+          <span className="logo-bold">Mind</span> Constellation
+        </h1>
+      </header>
 
-        {/* Left panel (slides in) */}
-        <div
-          className={`app-left ${leftOpen ? "open" : "closed"}`}
-          style={{ width: LEFT_W }}
+      <main className="app-main">
+        {mode === "sphere" ? (
+          <GraphView mode={mode} />
+        ) : (
+          <CalendarView activeMonthISO={activeMonthISO} />
+        )}
+      </main>
+
+      <footer className="app-footer">
+        <button 
+          className="icon-btn toggle-view" 
+          onClick={() => setMode(mode === "sphere" ? "month" : "sphere")}
         >
-          <LeftPanel
-            open={leftOpen}
-            node={selectedNode}
-            onClose={() => {
-              setLeftOpen(false);
-              setSelectedNode(null);
-            }}
-          />
-        </div>
-
-        {/* Right panel (slides in) */}
-        <div
-          className={`app-right ${rightOpen ? "open" : "closed"}`}
-          style={{ width: RIGHT_W }}
-        >
-          <RightPanel open={rightOpen} onClose={() => setRightOpen(false)} />
-        </div>
-      </div>
+          {mode === "sphere" ? (
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          ) : (
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+          )}
+        </button>
+      </footer>
     </div>
   );
 }

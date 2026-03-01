@@ -1,24 +1,78 @@
 :root {
-  --topbar-h: 56px;
+  --bg-dark: #121212;
+  --border-color: #2e2e2e;
+  --text-main: #ffffff;
+  --text-muted: #666666;
+  --calm-color: #8a9a5b;
+  --transition-speed: 0.3s;
 }
 
-html, body, #root {
-  height: 100%;
+body, html {
   margin: 0;
+  padding: 0;
+  overflow: hidden; 
+  background-color: var(--bg-dark);
 }
 
 .app-root {
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  position: relative;
   display: flex;
   flex-direction: column;
-  background: #0b0f14; /* tweak later */
-  color: white;
+  font-family: 'Inter', -apple-system, sans-serif;
+  z-index: 1;
 }
 
-.app-topbar {
-  height: var(--topbar-h);
-  flex: 0 0 var(--topbar-h);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+/* UI Elements */
+.app-header {
+  position: absolute;
+  top: 30px;
+  left: 30px;
+  z-index: 100;
+}
+
+.logo {
+  font-size: 1.4rem;
+  font-weight: 300;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.logo-bold {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.app-footer {
+  position: absolute;
+  bottom: 30px;
+  left: 30px;
+  z-index: 100;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px;
+  transition: color var(--transition-speed);
+}
+
+.icon-btn:hover { color: var(--text-main); }
+
+.icon-btn:focus, 
+.nav-arrow:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.icon-btn:focus-visible {
+  color: var(--text-main);
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
 }
 
 .topbar-inner {
@@ -69,48 +123,140 @@ html, body, #root {
 }
 
 .app-main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.calendar-container {
+  width: 85%;
+  max-width: 1100px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  margin-top: 2vh;
+}
+
+.calendar-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 40px;
+  padding: 10px 0 20px 0; 
+}
+
+.month-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.month-display h2 {
+  font-size: 1.5rem;
+  margin: 0;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--text-main);
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: 35px repeat(5, 1fr); 
+  flex: 1; 
+  border-top: 1px solid var(--border-color);
+  border-left: 1px solid var(--border-color);
+}
+
+.grid-label {
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.grid-cell {
+  padding: 8px;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   position: relative;
-  flex: 1 1 auto;
-  min-height: 0; /* critical so children can size correctly */
-  overflow: hidden;
+  box-sizing: border-box; 
 }
 
-.app-center {
+.cell-num {
+  font-size: 0.75rem;
+  color: #333333;
   position: absolute;
-  inset: 0;
-  /* paddingLeft/Right set inline based on panel open states */
-  transition: padding 220ms ease;
+  top: 8px;
+  left: 8px;
 }
 
-/* Panels are overlays that slide in/out */
-.app-left, .app-right {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 10;
-  background: rgba(12, 16, 22, 0.94);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.06);
+.nav-arrow {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
 }
 
-.app-left {
-  left: 0;
-  border-left: none;
-  transform: translateX(-100%);
-  transition: transform 220ms ease;
+.calm-highlight {
+  color: var(--calm-color);
+  font-weight: 500;
 }
 
-.app-left.open {
-  transform: translateX(0);
+.voice-overlay {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: opacity 0.5s ease; 
 }
 
-.app-right {
-  right: 0;
-  border-right: none;
-  transform: translateX(100%);
-  transition: transform 220ms ease;
+.voice-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
 }
 
-.app-right.open {
-  transform: translateX(0);
+.mic-circle {
+  width: 120px;
+  height: 120px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.active-mic {
+  border-color: rgba(255, 75, 75, 0.4);
+  box-shadow: 0 0 40px rgba(255, 75, 75, 0.15);
+}
+
+.voice-content p {
+  font-size: 1.1rem;
+  letter-spacing: 1px;
+  color: var(--text-muted);
 }

@@ -1,8 +1,12 @@
-export default function GraphView() {
+const GraphView = ({ mode }: { mode: string }) => {
   return (
-    <div>
-      <h1>Graph View</h1>
-      {/* Graph visualization will go here */}
+    <div className="graph-placeholder">
+      {/* Your friend's constellation logic will go here */}
+      <div className="status-indicator">
+        Displaying: {mode.toUpperCase()} MODE
+      </div>
     </div>
-  )
-}
+  );
+};
+
+export default GraphView;
