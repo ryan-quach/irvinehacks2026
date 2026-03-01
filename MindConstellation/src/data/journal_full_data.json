@@ -1,0 +1,222 @@
+{
+  "themes_key": ["growth", "work", "fitness", "school", "sleep", "stress", "relationships"],
+  "entries": [
+    {
+      "id": "2026-01-01",
+      "entry_date": "2026-01-01",
+      "created_at": "2026-01-01 20:00:00",
+      "transcript": "Started the year feeling energetic and excited. I outlined goals for work, fitness, and school projects. Motivation and happiness are high, and I’m looking forward to tracking progress and seeing growth over time.",
+      "summary": "Excited and motivated on new year.",
+      "primary_emotion": "excitement",
+      "secondary_emotion": "happiness",
+      "intensity": 0.8,
+      "valence": 0.75,
+      "arousal": 0.85,
+      "themes": ["growth", "work", "fitness", "school"],
+      "color": "#FFD700",
+      "embeddings": [
+        [0.12, 0.88, -0.04], 
+        [0.45, 0.12, -0.10], 
+        [0.02, 0.91, 0.33], 
+        [0.67, -0.20, 0.44], 
+        null, null, null
+      ]
+    },
+    {
+      "id": "2026-01-02",
+      "entry_date": "2026-01-02",
+      "created_at": "2026-01-02 20:00:00",
+      "transcript": "Woke up tired and slightly anxious. Emails and school tasks piled up quickly, making focus difficult. Managed a short workout which slightly lifted my mood. Planning ahead keeps me motivated.",
+      "summary": "Tired but slightly lifted by exercise.",
+      "primary_emotion": "anxiety",
+      "secondary_emotion": "stress",
+      "intensity": 0.7,
+      "valence": -0.1,
+      "arousal": 0.7,
+      "themes": ["work", "fitness", "school"],
+      "color": "#A892EE",
+      "embeddings": [
+        null,
+        [0.42, 0.15, -0.08], 
+        [0.05, 0.89, 0.31], 
+        [0.61, -0.18, 0.40], 
+        null, null, null
+      ]
+    },
+    {
+      "id": "2026-01-03",
+      "entry_date": "2026-01-03",
+      "created_at": "2026-01-03 20:00:00",
+      "transcript": "Calm and productive day. Brainstormed features for upcoming school projects and imagined how to organize tasks efficiently. Consistent progress feels satisfying.",
+      "summary": "Calm and focused on school projects.",
+      "primary_emotion": "calm",
+      "secondary_emotion": "happiness",
+      "intensity": 0.65,
+      "valence": 0.6,
+      "arousal": 0.5,
+      "themes": ["school", "work", "growth"],
+      "color": "#8a9a5b",
+      "embeddings": [
+        [0.15, 0.82, -0.02], 
+        [0.40, 0.10, -0.15], 
+        null,
+        [0.58, -0.25, 0.48], 
+        null, null, null
+      ]
+    },
+    {
+      "id": "2026-01-04",
+      "entry_date": "2026-01-04",
+      "created_at": "2026-01-04 20:00:00",
+      "transcript": "Poor sleep left me stressed and irritable. Small tasks at work and school felt heavier than usual. Tracking these patterns could be useful to see how sleep affects mood.",
+      "summary": "Sleep deprivation affecting mood.",
+      "primary_emotion": "stress",
+      "secondary_emotion": "anxiety",
+      "intensity": 0.75,
+      "valence": -0.4,
+      "arousal": 0.45,
+      "themes": ["sleep", "work", "stress", "school"],
+      "color": "#FF6B6B",
+      "embeddings": [
+        null,
+        [0.38, 0.08, -0.12], 
+        null,
+        [0.55, -0.22, 0.45], 
+        [0.88, 0.12, 0.05], 
+        [0.72, 0.44, -0.1], 
+        null
+      ]
+    },
+    {
+      "id": "2026-01-05",
+      "entry_date": "2026-01-05",
+      "created_at": "2026-01-05 20:00:00",
+      "transcript": "Managed a good workout which improved my mood considerably. Schoolwork and tasks went more smoothly. Physical activity clearly lifts both happiness and motivation.",
+      "summary": "Workout boosting mood.",
+      "primary_emotion": "happiness",
+      "secondary_emotion": "calm",
+      "intensity": 0.7,
+      "valence": 0.7,
+      "arousal": 0.6,
+      "themes": ["fitness", "work", "growth", "school"],
+      "color": "#4ECDC4",
+      "embeddings": [
+        [0.11, 0.85, -0.05], 
+        [0.44, 0.11, -0.12], 
+        [0.03, 0.93, 0.35], 
+        [0.65, -0.22, 0.42], 
+        null, null, null
+      ]
+    },
+    {
+      "id": "2026-01-06",
+      "entry_date": "2026-01-06",
+      "created_at": "2026-01-06 20:00:00",
+      "transcript": "Felt anxious about presenting a school assignment today. Heart raced but relief followed afterward. Emotional variability like this shows why tracking patterns over time is helpful.",
+      "summary": "Presentation anxiety followed by relief.",
+      "primary_emotion": "anxiety",
+      "secondary_emotion": "happiness",
+      "intensity": 0.8,
+      "valence": 0.1,
+      "arousal": 0.85,
+      "themes": ["work", "stress", "school"],
+      "color": "#A892EE",
+      "embeddings": [
+        null,
+        [0.46, 0.14, -0.05], 
+        null,
+        [0.63, -0.15, 0.38], 
+        null,
+        [0.75, 0.40, -0.12], 
+        null
+      ]
+    },
+    {
+      "id": "2026-01-07",
+      "entry_date": "2026-01-07",
+      "created_at": "2026-01-07 20:00:00",
+      "transcript": "Reflective discussion about long-term school goals. Excitement mixed with stress about execution. Motivated to plan actionable steps.",
+      "summary": "Reflection with mixed feelings.",
+      "primary_emotion": "excitement",
+      "secondary_emotion": "stress",
+      "intensity": 0.75,
+      "valence": 0.3,
+      "arousal": 0.7,
+      "themes": ["relationships", "growth", "school"],
+      "color": "#FFD700",
+      "embeddings": [
+        [0.18, 0.80, -0.01], 
+        null, null,
+        [0.68, -0.22, 0.45], 
+        null, null,
+        [0.55, 0.20, 0.10]
+      ]
+    },
+    {
+      "id": "2026-01-08",
+      "entry_date": "2026-01-08",
+      "created_at": "2026-01-08 20:00:00",
+      "transcript": "Flow state coding for a school project. Calm focus and engagement made the work enjoyable.",
+      "summary": "Flow state while working on school project.",
+      "primary_emotion": "calm",
+      "secondary_emotion": "excitement",
+      "intensity": 0.7,
+      "valence": 0.65,
+      "arousal": 0.7,
+      "themes": ["school", "work", "growth"],
+      "color": "#8a9a5b",
+      "embeddings": [
+        [0.14, 0.84, -0.03], 
+        [0.41, 0.11, -0.14], 
+        null,
+        [0.60, -0.10, 0.50], 
+        null, null, null
+      ]
+    },
+    {
+      "id": "2026-01-09",
+      "entry_date": "2026-01-09",
+      "created_at": "2026-01-09 20:00:00",
+      "transcript": "Neutral day, routine school and work tasks. Calm but low energy. Recognizing neutral days are baseline for pattern analysis.",
+      "summary": "Neutral routine day.",
+      "primary_emotion": "calm",
+      "secondary_emotion": "stress",
+      "intensity": 0.5,
+      "valence": 0.2,
+      "arousal": 0.4,
+      "themes": ["work", "sleep", "school"],
+      "color": "#8a9a5b",
+      "embeddings": [
+        null,
+        [0.35, 0.05, -0.20], 
+        null,
+        [0.50, -0.30, 0.35], 
+        [0.85, 0.10, 0.02], 
+        null, null
+      ]
+    },
+    {
+      "id": "2026-01-10",
+      "entry_date": "2026-01-10",
+      "created_at": "2026-01-10 20:00:00",
+      "transcript": "Deadlines causing stress. Skipped the gym, increasing tension. Noticing patterns where missed habits amplify stress, including school assignments.",
+      "summary": "Deadline stress spike.",
+      "primary_emotion": "stress",
+      "secondary_emotion": "anxiety",
+      "intensity": 0.78,
+      "valence": -0.5,
+      "arousal": 0.8,
+      "themes": ["work", "fitness", "stress", "school"],
+      "color": "#FF6B6B",
+      "embeddings": [
+        null,
+        [0.40, 0.09, -0.11], 
+        [0.08, 0.85, 0.25], 
+        [0.56, -0.20, 0.42], 
+        null,
+        [0.78, 0.48, -0.05], 
+        null
+      ]
+    }
+  ]
+}

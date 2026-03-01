@@ -130,7 +130,8 @@ body, html {
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: 35px repeat(5, 1fr); 
+  /* Changed from repeat(5, 1fr) to repeat(6, 1fr) for full coverage */
+  grid-template-rows: 35px repeat(6, 1fr); 
   flex: 1; 
   border-top: 1px solid var(--border-color);
   border-left: 1px solid var(--border-color);
