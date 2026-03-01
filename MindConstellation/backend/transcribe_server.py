@@ -14,10 +14,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from faster_whisper import WhisperModel
 
-# Ensure this file's directory (backend/) is on the path so journal_processor is importable
+# Ensure this file's directory (backend/) is on the path so local modules are importable
 # regardless of where uvicorn is launched from.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from journal_processor import build_row
+
+from dotenv import load_dotenv
+# .env lives at MindConstellation/.env — 1 level up from backend/
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
+
+from submit_entry import submit_journal_entry
 
 
 # --- Whisper model (loaded once at startup) ---
@@ -55,14 +60,14 @@ class TranscriptRequest(BaseModel):
 
 @app.post("/process-transcript")
 async def process_transcript(req: TranscriptRequest):
-    """Run journal_processor.build_row on the full session transcript.
-    Prints the result to the server console and returns it as JSON."""
+    """Call submit_journal_entry(transcript) which runs build_row and inserts
+    both journal_entries and theme_embeddings into Supabase."""
     loop = asyncio.get_event_loop()
-    row = await loop.run_in_executor(None, build_row, req.transcript)
-    print("\n=== JOURNAL ROW ===")
-    print(json.dumps(row, indent=2))
-    print("==================\n")
-    return row
+    journal_id = await loop.run_in_executor(None, submit_journal_entry, req.transcript)
+
+    print(f"\n=== ENTRY SAVED === journal_id: {journal_id} ===")
+
+    return {"success": True, "journal_id": journal_id}
 
 
 @app.websocket("/ws/transcribe")
