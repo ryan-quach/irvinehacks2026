@@ -46,7 +46,9 @@ function clamp01(n: number): number {
 
 function formatEntryDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString("en-US", {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const localDate = new Date(year, month - 1, day);
+    return localDate.toLocaleDateString("en-US", {
       weekday: "long",
       month: "long",
       day: "numeric",

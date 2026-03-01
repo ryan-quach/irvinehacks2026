@@ -1,12 +1,9 @@
-import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ForceGraph3D, { type ForceGraphMethods } from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
-import * as THREE from 'three';
-import graphDataRaw from '../data/journal_full_data.json';
-import JournalEntryView, {
-  type JournalEntry,
-  type ScreenPoint,
-} from './JournalEntryView';
+import * as THREE from 'three'; 
+import { supabase } from '../utils/supabaseClient';
+import JournalEntryView, { type JournalEntry, type ScreenPoint } from './JournalEntryView';
 
 // --- Configuration ---
 const EMOTION_COLORS: Record<string, string> = {
@@ -16,10 +13,28 @@ const EMOTION_COLORS: Record<string, string> = {
   anxiety: "#A892EE",
   stress: "#FF6B6B",
   sadness: "#5DADE2",
-  anger: "#E74C3C",
+  anger: "#E74C3C"
 };
 
-const THEMES_COUNT = 7;
+// --- TypeScript Interfaces ---
+interface GraphNode {
+  id: string;
+  primary_emotion: string;
+  intensity: number;
+  themeMap: Map<string, number[]>; 
+  leaderLabel?: string;
+  [key: string]: any; 
+}
+
+interface GraphLink {
+  source: string;
+  target: string;
+}
+
+interface GraphData {
+  nodes: GraphNode[];
+  links: GraphLink[];
+}
 
 interface GraphViewProps {
   isVisible: boolean;
@@ -30,173 +45,184 @@ const getCosineSimilarity = (vecA: number[], vecB: number[]) => {
   const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
   const magA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
   const magB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
-  if (magA === 0 || magB === 0) return 0;
-  return dotProduct / (magA * magB);
+  return (magA === 0 || magB === 0) ? 0 : dotProduct / (magA * magB);
 };
 
 const GraphView: React.FC<GraphViewProps> = ({ isVisible }) => {
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
-
-  // ── Journal Entry View state ──────────────────────────────────────────────
-  const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
+  
+  // ─── State Management ──────────────────────────────────────────────────────
+  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
+  const [loading, setLoading] = useState(true);
+  
+  // Overlay State
   const [entryOpen, setEntryOpen] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   const [nodeColor, setNodeColor] = useState("#ffffff");
   const [clickOrigin, setClickOrigin] = useState<ScreenPoint>({ x: 0, y: 0 });
 
-  // ── Node click handler ────────────────────────────────────────────────────
-  const handleNodeClick = useCallback((node: any, event: MouseEvent) => {
-    const color = EMOTION_COLORS[node.primary_emotion] || "#ffffff";
+  // ─── Data Fetching & Processing ───────────────────────────────────────────
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: entries, error: eError } = await supabase.from('journal_entries').select('*');
+      const { data: embeddings, error: embError } = await supabase.from('theme_embeddings').select('*');
 
-    // Screen position of the click for the flood animation origin
-    setClickOrigin({ x: event.clientX, y: event.clientY });
-    setNodeColor(color);
+      if (eError || embError) {
+        console.error("Supabase Error:", eError || embError);
+        return;
+      }
 
-    // Map graph node → JournalEntry shape
-    setSelectedEntry({
-      transcript: node.transcript || "",
-      summary: node.summary || "",
-      primary_emotion: node.primary_emotion || "",
-      secondary_emotion: node.secondary_emotion || "",
-      intensity: node.intensity ?? 0,
-      valence: node.valence ?? 0,
-      arousal: node.arousal ?? 0,
-      themes: node.themes || [],
-      embedding: "",
-      entry_date: node.entry_date || "",
-      created_at: node.created_at || "",
-    });
+      // 1. Map embeddings to Journal IDs
+      const nodeEmbeddingsMap = new Map<string, Map<string, number[]>>();
+      embeddings.forEach((emb: any) => {
+        if (!nodeEmbeddingsMap.has(emb.journal_id)) {
+          nodeEmbeddingsMap.set(emb.journal_id, new Map());
+        }
+        const vector = typeof emb.embedding === 'string' 
+          ? JSON.parse(emb.embedding) 
+          : emb.embedding;
+        nodeEmbeddingsMap.get(emb.journal_id)?.set(emb.theme.toLowerCase(), vector);
+      });
 
-    setEntryOpen(true);
-  }, []);
+      // 2. Build Node Objects
+      const nodes: GraphNode[] = entries.map((entry: any) => ({
+        ...entry,
+        themeMap: nodeEmbeddingsMap.get(entry.id) || new Map()
+      }));
 
-  // 1. Data Processing — keep ALL fields from raw data
-  const processedData = useMemo(() => {
-    const rawEntries = graphDataRaw?.entries || [];
+      // 3. Build Links (Connectivity + Top-K Strategy)
+      const links: GraphLink[] = [];
+      const themeConnectionCounts: Record<string, Record<string, number>> = {}; 
 
-    // Spread all fields so JournalEntryView has access to transcript, valence, etc.
-    const entries = rawEntries.map((node: any) => ({
-      ...node,
-      id: node.id,
-    }));
+      nodes.forEach((nodeA, i) => {
+        const potentialLinks: { id: string, score: number, theme: string }[] = [];
 
-    const links: any[] = [];
-    const connectionCounts: Record<string, number> = {};
-    const THRESHOLD = 0.85;
-
-    entries.forEach((nodeA: any, i: number) => {
-      for (let tIdx = 0; tIdx < THEMES_COUNT; tIdx++) {
-        let bestMatch: { id: string; score: number } | null = null;
-        const vA = nodeA.embeddings?.[tIdx];
-        if (!vA) continue;
-
-        entries.forEach((nodeB: any, j: number) => {
+        nodes.forEach((nodeB, j) => {
           if (i === j) return;
-          const vB = nodeB.embeddings?.[tIdx];
-          if (!vB) return;
+          let maxSim = -1; 
+          let bestTheme = "general";
 
-          const score = getCosineSimilarity(vA, vB);
-          if (score > THRESHOLD) {
-            if (!bestMatch || score > bestMatch.score) {
-              bestMatch = { id: nodeB.id, score };
+          nodeA.themeMap.forEach((vecA, theme) => {
+            const vecB = nodeB.themeMap.get(theme);
+            if (vecB) {
+              const score = getCosineSimilarity(vecA, vecB);
+              if (score > maxSim) {
+                maxSim = score;
+                bestTheme = theme;
+              }
             }
-          }
+          });
+          potentialLinks.push({ id: nodeB.id, score: maxSim, theme: bestTheme });
         });
 
+        potentialLinks.sort((a, b) => b.score - a.score);
+
+        // A. Mandatory Best-Match Link (Prevents Isolation)
+        const bestMatch = potentialLinks[0];
         if (bestMatch) {
-          const match = bestMatch as { id: string; score: number };
-          links.push({ source: nodeA.id, target: match.id });
-          connectionCounts[nodeA.id] = (connectionCounts[nodeA.id] || 0) + 1;
-          connectionCounts[match.id] = (connectionCounts[match.id] || 0) + 1;
+          links.push({ source: nodeA.id, target: bestMatch.id });
+          if (!themeConnectionCounts[nodeA.id]) themeConnectionCounts[nodeA.id] = {};
+          themeConnectionCounts[nodeA.id][bestMatch.theme] = (themeConnectionCounts[nodeA.id][bestMatch.theme] || 0) + 1;
         }
-      }
-    });
 
-    const emotionLeaders: Record<string, string> = {};
-    const maxCounts: Record<string, number> = {};
-    entries.forEach((node: any) => {
-      const count = connectionCounts[node.id] || 0;
-      if (!maxCounts[node.primary_emotion] || count > maxCounts[node.primary_emotion]) {
-        maxCounts[node.primary_emotion] = count;
-        emotionLeaders[node.primary_emotion] = node.id;
-      }
-    });
+        // B. Secondary Link (If Score is Meaningful)
+        const secondMatch = potentialLinks[1];
+        if (secondMatch && secondMatch.score > 0.25) {
+          links.push({ source: nodeA.id, target: secondMatch.id });
+          themeConnectionCounts[nodeA.id][secondMatch.theme] = (themeConnectionCounts[nodeA.id][secondMatch.theme] || 0) + 1;
+        }
+      });
 
-    return {
-      nodes: entries.map((node: any) => ({
-        ...node,
-        isLeader:
-          emotionLeaders[node.primary_emotion] === node.id &&
-          (connectionCounts[node.id] || 0) > 0,
-      })),
-      links,
+      // 4. Identify Theme Leaders
+      const themeLeaders: Record<string, { id: string, count: number }> = {};
+      Object.keys(themeConnectionCounts).forEach(nodeId => {
+        Object.entries(themeConnectionCounts[nodeId]).forEach(([theme, count]) => {
+          if (!themeLeaders[theme] || count > themeLeaders[theme].count) {
+            themeLeaders[theme] = { id: nodeId, count };
+          }
+        });
+      });
+
+      const finalNodes = nodes.map(node => {
+        let leaderLabel = undefined;
+        Object.entries(themeLeaders).forEach(([theme, leaderInfo]) => {
+          if (leaderInfo.id === node.id) {
+            leaderLabel = theme.replace('_', ' ');
+          }
+        });
+        return { ...node, leaderLabel };
+      });
+
+      setGraphData({ nodes: finalNodes, links });
+      setLoading(false);
     };
+
+    fetchData();
   }, []);
 
-  // 2. Physics & Visibility Control
+  // ─── Physics & Visibility Tuning ──────────────────────────────────────────
   useEffect(() => {
-  if (!fgRef.current) return;
+    if (!fgRef.current || loading) return;
+    if (isVisible) {
+      setTimeout(() => {
+        // High repulsion and specific link distance to avoid clumping
+        fgRef.current?.d3Force('charge')?.strength(-150); 
+        fgRef.current?.d3Force('link')?.distance(50);
+        fgRef.current?.d3Force('collide', (THREE as any).d3ForceCollide(100));
+        fgRef.current?.d3ReheatSimulation();
+        fgRef.current?.refresh();
+      }, 50);
+    } else {
+      fgRef.current.stopAnimation();
+    }
+  }, [isVisible, loading]);
 
-  if (isVisible) {
-    fgRef.current.resumeAnimation(); // ← this was missing
+  // ─── Interaction Handlers ─────────────────────────────────────────────────
+  const handleNodeClick = (node: any, event: MouseEvent) => {
+    setClickOrigin({ x: event.clientX, y: event.clientY });
+    setSelectedEntry(node as JournalEntry);
+    setNodeColor(EMOTION_COLORS[node.primary_emotion] || "#ffffff");
+    setEntryOpen(true);
+  };
 
-    const timer = setTimeout(() => {
-      fgRef.current?.d3Force('charge')?.strength(-400);
-      fgRef.current?.d3Force('link')?.distance(120);
-      fgRef.current?.d3ReheatSimulation();
-      fgRef.current?.refresh();
-    }, 50);
-    return () => clearTimeout(timer);
-  } else {
-    fgRef.current.pauseAnimation();
-  }
-}, [isVisible]);
+  if (loading) return null;
 
   return (
-    <div
-      className="graph-wrapper"
-      style={{
-        width: '100vw',
-        height: '100vh',
-        background: '#020202',
-        position: 'relative',
-      }}
-    >
+    <div className="graph-wrapper" style={{ width: '100vw', height: '100vh', background: '#020202' }}>
       <ForceGraph3D
         ref={fgRef}
-        graphData={processedData}
+        graphData={graphData}
         backgroundColor="#020202"
         showNavInfo={false}
-        linkColor={() => "rgba(255, 255, 255, 0.25)"}
-        linkWidth={1.5}
-        nodeLabel={() => ""}
+        linkColor={() => "rgba(255, 255, 255, 0.6)"}
+        linkWidth={2.0}
         onNodeClick={handleNodeClick}
         nodeThreeObject={(node: any) => {
           const color = EMOTION_COLORS[node.primary_emotion] || "#ffffff";
-          const radius = 6 + Math.pow(node.intensity, 2) * 15;
-
+          const radius = 6 + (Math.pow(node.intensity, 2) * 15);
           const geometry = new THREE.SphereGeometry(radius, 32, 32);
           const material = new THREE.MeshBasicMaterial({ color });
           const sphere = new THREE.Mesh(geometry, material);
 
-          if (node.isLeader) {
-            const sprite = new SpriteText(node.primary_emotion.toUpperCase());
-            sprite.color = color;
-            sprite.textHeight = 10;
+          if (node.leaderLabel) {
+            const sprite = new SpriteText(node.leaderLabel.toUpperCase());
+            sprite.color = "#ffffff";
+            sprite.textHeight = 14;
             sprite.fontWeight = 'bold';
-            sprite.position.set(0, radius + 15, 0);
-            sprite.center.set(0.5, 0);
-
+            sprite.backgroundColor = 'rgba(0,0,0,0.5)';
+            sprite.padding = 2;
+            sprite.position.set(0, radius + 25, 0); 
+            sprite.center.set(0.5, 0); 
+            
             const group = new THREE.Group();
-            group.add(sphere);
+            group.add(sphere); 
             group.add(sprite);
             return group;
           }
-
           return sphere;
         }}
       />
 
-      {/* Journal Entry overlay */}
       <JournalEntryView
         open={entryOpen}
         entry={selectedEntry}
